@@ -92,7 +92,6 @@
   <script>
   document.addEventListener('DOMContentLoaded', () => {
     const DURATION = 30 * 1000; // testing = 30s; change back to 4*3600*1000 for 4h
-    // ── REPLACE this URL with your Apps Script exec URL ──
     const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
     const rows     = ['A','B','C','D','E','F'];
     const slots    = {};
@@ -104,7 +103,6 @@
     let inactiveCount    = 0;
     let activatedCount   = 0;
 
-    // send to Apps Script
     function logEvent(action, id) {
       const room = id.split('-')[0];
       const slot = slots[id].label;
@@ -114,7 +112,6 @@
       fetch(`${LOG_URL}?${params}`).catch(console.error);
     }
 
-    // build each slot div
     function createSlot(id, container) {
       const [,server,lab] = id.split('-');
       const label = `S${server}-${lab}`;
@@ -126,10 +123,8 @@
       slots[id] = {el, label, end:0, iv:null};
     }
 
-    // click logic
     function handleClick(id) {
       const obj = slots[id], el = obj.el;
-      // inactivate
       if (currentInactivator && !el.classList.contains('in-use') && !el.classList.contains('done')) {
         el.classList.add('inactive');
         inactiveCount++;
@@ -137,7 +132,6 @@
         logEvent('inactivated', id);
         return;
       }
-      // activate
       if (currentActivator && el.classList.contains('inactive')) {
         el.classList.remove('inactive');
         activatedCount++;
@@ -145,7 +139,6 @@
         logEvent('activated', id);
         return;
       }
-      // collect
       if (el.classList.contains('done')) {
         if (!currentCollector) return;
         el.classList.remove('done');
@@ -155,7 +148,6 @@
         updateReady();
         return;
       }
-      // upload start
       if (!currentName || el.classList.contains('in-use') || el.classList.contains('inactive')) return;
       el.classList.add('in-use');
       obj.end = Date.now() + DURATION;
@@ -163,7 +155,6 @@
       logEvent('upload_started', id);
     }
 
-    // countdown
     function updateTimer(id) {
       const obj = slots[id], rem = obj.end - Date.now();
       if (!obj.end) return;
@@ -178,7 +169,6 @@
       }
     }
 
-    // soonest list
     function updateSoonest() {
       const list = document.getElementById('soonestList');
       list.innerHTML = '';
@@ -193,7 +183,6 @@
         });
     }
 
-    // ready counters
     function updateReady() {
       const allDone = Object.values(slots).filter(v => v.el.classList.contains('done')).length;
       document.getElementById('readyCount-global').innerText = allDone;
@@ -205,7 +194,6 @@
       document.getElementById('readyCount-255').innerText = `Room 255: ${done255}`;
     }
 
-    // build all grids
     function buildGrids() {
       const c440 = document.getElementById('grids-440');
       for (let i=1; i<=6; i++) {
@@ -230,8 +218,8 @@
       });
     }
 
-    // wire up buttons
     function bindControls() {
+      /* logging buttons */
       document.getElementById('startLogging').onclick = function() {
         currentName = document.getElementById('logNameInput').value.trim();
         if (!currentName) return;
@@ -245,6 +233,7 @@
         this.disabled = true;
         document.getElementById('startLogging').disabled = false;
       };
+      /* collecting buttons */
       document.getElementById('startCollecting').onclick = function() {
         currentCollector = document.getElementById('collectorNameInput').value.trim();
         if (!currentCollector) return;
@@ -258,6 +247,7 @@
         this.disabled = true;
         document.getElementById('startCollecting').disabled = false;
       };
+      /* inactivating buttons */
       document.getElementById('startInactivating').onclick = function() {
         currentInactivator = document.getElementById('inactiveNameInput').value.trim();
         if (!currentInactivator) return;
@@ -271,6 +261,7 @@
         this.disabled = true;
         document.getElementById('startInactivating').disabled = false;
       };
+      /* activating buttons */
       document.getElementById('startActivating').onclick = function() {
         currentActivator = document.getElementById('activeNameInput').value.trim();
         if (!currentActivator) return;
@@ -284,6 +275,7 @@
         this.disabled = true;
         document.getElementById('startActivating').disabled = false;
       };
+      /* room switch buttons */
       document.getElementById('btn440').onclick = () => switchRoom('440');
       document.getElementById('btn255').onclick = () => switchRoom('255');
     }
@@ -293,14 +285,14 @@
       document.getElementById(`room-${room}`).classList.add('active');
     }
 
-    // ── INITIALIZE ──
+    // INITIALIZE
     buildGrids();
     bindControls();
     updateReady();
     setInterval(updateSoonest, 1000);
     setInterval(() => Object.keys(slots).forEach(updateTimer), 1000);
 
-    // ── POLLING FOR SHARED STATE ──
+    // POLLING FOR SHARED STATE
     fetchState();
     setInterval(fetchState, 5000);
 
