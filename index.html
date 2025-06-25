@@ -10,18 +10,23 @@
     .room-container { display: none; }
     .room-container.active { display: block; }
     #controls, #soonestContainer, #readyContainer, #collectContainer { margin-bottom: 10px; }
-    #inactiveContainer, #activeContainer { position: absolute; right: 10px; background: #fff; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    #inactiveContainer, #activeContainer {
+      position: absolute; right: 10px; background: #fff;
+      padding: 8px; border: 1px solid #ccc; border-radius: 4px;
+    }
     #inactiveContainer { top: 10px; }
-    #activeContainer { top: 140px; }
+    #activeContainer   { top: 140px; }
     .grids { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; transform: scale(0.7); transform-origin: top left; }
-    .grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 5px; }
+    .grid  { display: grid; grid-template-columns: repeat(6,1fr); gap: 5px; }
     .grid-wrapper h3 { margin: 0 0 5px; }
     /* 1:3 vertical rectangle slots */
-    .slot { background: #e0ffe0; border: 1px solid #ccc; border-radius:4px; position: relative; width:100%; padding-top:300%; cursor: pointer; }
-    .slot.in-use { background: #ffcccc; cursor: default; }
-    .slot.done { background: #add8e6; }
-    .slot.inactive { background: #888; cursor: not-allowed; }
-    .slot .content { position: absolute; top:0; left:0; right:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .slot { background: #e0ffe0; border: 1px solid #ccc; border-radius:4px;
+             position: relative; width:100%; padding-top:300%; cursor: pointer; }
+    .slot.in-use    { background: #ffcccc; cursor: default; }
+    .slot.done      { background: #add8e6; }
+    .slot.inactive  { background: #888; cursor: not-allowed; }
+    .slot .content  { position: absolute; top:0; left:0; right:0; bottom:0;
+                      display:flex; flex-direction:column; align-items:center; justify-content:center; }
     input, button { padding:6px 12px; margin-right:8px; }
     .status { font-weight:bold; margin-left:8px; }
   </style>
@@ -33,10 +38,10 @@
   </nav>
 
   <div id="controls">
-    <input id="logNameInput" placeholder="Uploader name...">
+    <input  id="logNameInput" placeholder="Uploader name…">
     <button id="startLogging">Begin Logging</button>
     <button id="finishLogging" disabled>Finish Logging</button>
-    <span id="currentNameDisplay" class="status"></span>
+    <span   id="currentNameDisplay" class="status"></span>
   </div>
 
   <div id="soonestContainer">
@@ -52,27 +57,27 @@
   </div>
 
   <div id="collectContainer">
-    <input id="collectorNameInput" placeholder="Collector name...">
+    <input  id="collectorNameInput" placeholder="Collector name…">
     <button id="startCollecting">Begin Collecting</button>
     <button id="finishCollecting" disabled>Finish Collecting</button>
-    <span id="collectorDisplay" class="status"></span>
-    <span id="collectedCountDisplay" class="status"></span>
+    <span   id="collectorDisplay" class="status"></span>
+    <span   id="collectedCountDisplay" class="status"></span>
   </div>
 
   <div id="inactiveContainer">
-    <input id="inactiveNameInput" placeholder="Inactivator name...">
+    <input  id="inactiveNameInput" placeholder="Inactivator name…">
     <button id="startInactivating">Mark Inactive</button>
     <button id="finishInactivating" disabled>Finish Inactivating</button>
-    <div id="inactivatorDisplay" class="status"></div>
-    <div id="inactiveCountDisplay" class="status"></div>
+    <div    id="inactivatorDisplay" class="status"></div>
+    <div    id="inactiveCountDisplay" class="status"></div>
   </div>
 
   <div id="activeContainer">
-    <input id="activeNameInput" placeholder="Activator name...">
+    <input  id="activeNameInput" placeholder="Activator name…">
     <button id="startActivating">Mark Active</button>
     <button id="finishActivating" disabled>Finish Activating</button>
-    <div id="activatorDisplay" class="status"></div>
-    <div id="activatedCountDisplay" class="status"></div>
+    <div    id="activatorDisplay" class="status"></div>
+    <div    id="activatedCountDisplay" class="status"></div>
   </div>
 
   <div id="room-440" class="room-container active">
@@ -85,127 +90,217 @@
   </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const DURATION = 30 * 1000; // 30 seconds
-      // Replace the URL below with your Apps Script Web App URL (the deployment ID is the long string between /s/ and /exec)
-      const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
-      const rows = ['A','B','C','D','E','F'];
-      const slots = {};
-      let currentName = '', currentCollector = '', currentInactivator = '', currentActivator = '';
-      let collectedCount = 0, inactiveCount = 0, activatedCount = 0;
+  document.addEventListener('DOMContentLoaded', () => {
+    const DURATION = 30 * 1000; // testing = 30s; change back to 4*3600*1000 for 4h
+    // ── REPLACE this URL with your Apps Script exec URL ──
+    const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
+    const rows     = ['A','B','C','D','E','F'];
+    const slots    = {};
+    let currentName      = '';
+    let currentCollector = '';
+    let currentInactivator = '';
+    let currentActivator   = '';
+    let collectedCount   = 0;
+    let inactiveCount    = 0;
+    let activatedCount   = 0;
 
-            function logEvent(action, id) {
-        const room = id.split('-')[0];
-        const slot = slots[id].label;
-        const params = new URLSearchParams({ action, room, slot, user: currentName || currentCollector || currentInactivator || currentActivator });
-        // Use GET to trigger doGet in Apps Script
-        fetch(`${LOG_URL}?${params}`)
-          .catch(console.error);
+    // send to Apps Script
+    function logEvent(action, id) {
+      const room = id.split('-')[0];
+      const slot = slots[id].label;
+      const user = currentName || currentCollector || currentInactivator || currentActivator;
+      if (!user) return;
+      const params = new URLSearchParams({action, room, slot, user});
+      fetch(`${LOG_URL}?${params}`).catch(console.error);
+    }
+
+    // build each slot div
+    function createSlot(id, container) {
+      const [,server,lab] = id.split('-');
+      const label = `S${server}-${lab}`;
+      const el = document.createElement('div');
+      el.className = 'slot';
+      el.innerHTML = `<div class="content"><div>${label}</div><div class="timer"></div></div>`;
+      el.addEventListener('click', () => handleClick(id));
+      container.appendChild(el);
+      slots[id] = {el, label, end:0, iv:null};
+    }
+
+    // click logic
+    function handleClick(id) {
+      const obj = slots[id], el = obj.el;
+      // inactivate
+      if (currentInactivator && !el.classList.contains('in-use') && !el.classList.contains('done')) {
+        el.classList.add('inactive');
+        inactiveCount++;
+        document.getElementById('inactiveCountDisplay').innerText = `Marked: ${inactiveCount}`;
+        logEvent('inactivated', id);
+        return;
       }
-
-      function createSlot(id, container) {
-        const parts = id.split('-');
-        const server = parts[1], slot = parts[2];
-        const label = `S${server}-${slot}`;
-        const el = document.createElement('div'); el.className = 'slot';
-        el.innerHTML = `<div class="content"><div>${label}</div><div class="timer"></div></div>`;
-        el.addEventListener('click', () => handleClick(id));
-        container.appendChild(el);
-        slots[id] = { el, end: 0, iv: null, label };
+      // activate
+      if (currentActivator && el.classList.contains('inactive')) {
+        el.classList.remove('inactive');
+        activatedCount++;
+        document.getElementById('activatedCountDisplay').innerText = `Activated: ${activatedCount}`;
+        logEvent('activated', id);
+        return;
       }
-
-      function handleClick(id) {
-        const obj = slots[id], el = obj.el;
-        if (currentInactivator && !el.classList.contains('in-use') && !el.classList.contains('done')) {
-          el.classList.add('inactive'); inactiveCount++; document.getElementById('inactiveCountDisplay').innerText = `Marked: ${inactiveCount}`;
-          logEvent('inactivated', id);
-          return;
-        }
-        if (currentActivator && el.classList.contains('inactive')) {
-          el.classList.remove('inactive'); activatedCount++; document.getElementById('activatedCountDisplay').innerText = `Activated: ${activatedCount}`;
-          logEvent('activated', id);
-          return;
-        }
-        if (el.classList.contains('done')) {
-          if (!currentCollector) return;
-          el.classList.remove('done'); collectedCount++; document.getElementById('collectedCountDisplay').innerText = `Collected: ${collectedCount}`;
-          logEvent('collected', id);
-          updateReady();
-          return;
-        }
-        if (!currentName || el.classList.contains('in-use') || el.classList.contains('inactive')) return;
-        el.classList.add('in-use'); obj.end = Date.now() + DURATION;
-        obj.iv = setInterval(() => updateTimer(id), 500);
-        logEvent('upload_started', id);
+      // collect
+      if (el.classList.contains('done')) {
+        if (!currentCollector) return;
+        el.classList.remove('done');
+        collectedCount++;
+        document.getElementById('collectedCountDisplay').innerText = `Collected: ${collectedCount}`;
+        logEvent('collected', id);
+        updateReady();
+        return;
       }
+      // upload start
+      if (!currentName || el.classList.contains('in-use') || el.classList.contains('inactive')) return;
+      el.classList.add('in-use');
+      obj.end = Date.now() + DURATION;
+      obj.iv  = setInterval(() => updateTimer(id), 500);
+      logEvent('upload_started', id);
+    }
 
-      function updateTimer(id) {
-        const obj = slots[id]; if (!obj.end) return;
-        const rem = obj.end - Date.now();
-        obj.el.querySelector('.timer').innerText = `${Math.ceil(rem/1000)}s`;
-        if (rem <= 0) {
-          clearInterval(obj.iv);
-          obj.el.classList.remove('in-use'); obj.el.classList.add('done'); obj.end = 0;
-          logEvent('upload_done', id);
-          updateReady();
-        }
+    // countdown
+    function updateTimer(id) {
+      const obj = slots[id], rem = obj.end - Date.now();
+      if (!obj.end) return;
+      obj.el.querySelector('.timer').innerText = `${Math.ceil(rem/1000)}s`;
+      if (rem <= 0) {
+        clearInterval(obj.iv);
+        obj.end = 0;
+        obj.el.classList.remove('in-use');
+        obj.el.classList.add('done');
+        logEvent('upload_done', id);
+        updateReady();
       }
+    }
 
-      function updateSoonest() {
-        const list = document.getElementById('soonestList'); list.innerHTML = '';
-        Object.entries(slots).filter(([_,v]) => v.el.classList.contains('in-use'))
-          .sort((a,b) => a[1].end - b[1].end).slice(0,5)
-          .forEach(([k,v]) => { const room = k.split('-')[0]; const li = document.createElement('li'); li.innerText = `${room}-${v.label}: ${Math.ceil((v.end-Date.now())/1000)}s`; list.appendChild(li); });
-      }
-
-      function updateReady() {
-        document.getElementById('readyCount-global').innerText = Object.values(slots).filter(v=>v.el.classList.contains('done')).length;
-        document.getElementById('readyCount-440').innerText = `Room 440: ${Object.entries(slots).filter(([k,v])=>k.startsWith('440-')&&v.el.classList.contains('done')).length}`;
-        document.getElementById('readyCount-255').innerText = `Room 255: ${Object.entries(slots).filter(([k,v])=>k.startsWith('255-')&&v.el.classList.contains('done')).length}`;
-      }
-
-      function buildGrids() {
-        const c440 = document.getElementById('grids-440');
-        for (let i=1; i<=6; i++) {
-          const wrap = document.createElement('div'); wrap.className='grid-wrapper';
-          const t = document.createElement('h3'); t.innerText=`Server ${i}`;
-          const g = document.createElement('div'); g.className='grid';
-          rows.forEach(r=>{ for (let c=1; c<=6; c++) createSlot(`440-${i}-${r}${c}`, g); });
-          wrap.appendChild(t); wrap.appendChild(g); c440.appendChild(wrap);
-        }
-        const c255 = document.getElementById('grids-255');
-        ['1','2'].forEach((i,j)=>{
-          const wrap = document.createElement('div'); wrap.className='grid-wrapper';
-          const t = document.createElement('h3'); t.innerText=`Server ${i}`;
-          const g = document.createElement('div'); g.className='grid';
-          const rs = j===0 ? rows : ['A']; rs.forEach(r=>{ for (let c=1; c<=6; c++) createSlot(`255-${i}-${r}${c}`, g); });
-          wrap.appendChild(t); wrap.appendChild(g); c255.appendChild(wrap);
+    // soonest list
+    function updateSoonest() {
+      const list = document.getElementById('soonestList');
+      list.innerHTML = '';
+      Object.entries(slots)
+        .filter(([_,v]) => v.el.classList.contains('in-use'))
+        .sort((a,b) => a[1].end - b[1].end)
+        .slice(0,5)
+        .forEach(([k,v]) => {
+          const li = document.createElement('li');
+          li.innerText = `${k.split('-')[0]}-${v.label}: ${Math.ceil((v.end-Date.now())/1000)}s`;
+          list.appendChild(li);
         });
+    }
+
+    // ready counters
+    function updateReady() {
+      const allDone = Object.values(slots).filter(v => v.el.classList.contains('done')).length;
+      document.getElementById('readyCount-global').innerText = allDone;
+      const done440 = Object.entries(slots)
+        .filter(([k,v]) => k.startsWith('440-') && v.el.classList.contains('done')).length;
+      const done255 = Object.entries(slots)
+        .filter(([k,v]) => k.startsWith('255-') && v.el.classList.contains('done')).length;
+      document.getElementById('readyCount-440').innerText = `Room 440: ${done440}`;
+      document.getElementById('readyCount-255').innerText = `Room 255: ${done255}`;
+    }
+
+    // build all grids
+    function buildGrids() {
+      const c440 = document.getElementById('grids-440');
+      for (let i=1; i<=6; i++) {
+        const wrap = document.createElement('div'); wrap.className='grid-wrapper';
+        const t    = document.createElement('h3'); t.innerText=`Server ${i}`;
+        const g    = document.createElement('div'); g.className='grid';
+        rows.forEach(r => {
+          for (let c=1; c<=6; c++) createSlot(`440-${i}-${r}${c}`, g);
+        });
+        wrap.appendChild(t); wrap.appendChild(g); c440.appendChild(wrap);
       }
+      const c255 = document.getElementById('grids-255');
+      ['1','2'].forEach((i,j) => {
+        const wrap = document.createElement('div'); wrap.className='grid-wrapper';
+        const t    = document.createElement('h3'); t.innerText=`Server ${i}`;
+        const g    = document.createElement('div'); g.className='grid';
+        const rs   = j===0 ? rows : ['A'];
+        rs.forEach(r => {
+          for (let c=1; c<=6; c++) createSlot(`255-${i}-${r}${c}`, g);
+        });
+        wrap.appendChild(t); wrap.appendChild(g); c255.appendChild(wrap);
+      });
+    }
 
-      function bindControls() {
-        document.getElementById('startLogging').onclick = function() { currentName = document.getElementById('logNameInput').value.trim(); if (!currentName) return; document.getElementById('currentNameDisplay').innerText = `Logging: ${currentName}`; this.disabled = true; document.getElementById('finishLogging').disabled = false; };
-        document.getElementById('finishLogging').onclick = function() { currentName = ''; document.getElementById('currentNameDisplay').innerText = ''; this.disabled = true; document.getElementById('startLogging').disabled = false; };
-        document.getElementById('startCollecting').onclick = function() { currentCollector = document.getElementById('collectorNameInput').value.trim(); if (!currentCollector) return; document.getElementById('collectorDisplay').innerText = `Collecting: ${currentCollector}`; this.disabled = true; document.getElementById('finishCollecting').disabled = false; };
-        document.getElementById('finishCollecting').onclick = function() { currentCollector = ''; document.getElementById('collectorDisplay').innerText = ''; this.disabled = true; document.getElementById('startCollecting').disabled = false; };
-        document.getElementById('startInactivating').onclick = function() { currentInactivator = document.getElementById('inactiveNameInput').value.trim(); if (!currentInactivator) return; document.getElementById('inactivatorDisplay').innerText = `Inactivating: ${currentInactivator}`; this.disabled = true; document.getElementById('finishInactivating').disabled = false; };
-        document.getElementById('finishInactivating').onclick = function() { currentInactivator = ''; document.getElementById('inactivatorDisplay').innerText = ''; this.disabled = true; document.getElementById('startInactivating').disabled = false; };
-        document.getElementById('startActivating').onclick = function() { currentActivator = document.getElementById('activeNameInput').value.trim(); if (!currentActivator) return; document.getElementById('activatorDisplay').innerText = `Activating: ${currentActivator}`; this.disabled = true; document.getElementById('finishActivating').disabled = false; };
-        document.getElementById('finishActivating').onclick = function() { currentActivator = ''; document.getElementById('activatorDisplay').innerText = ''; this.disabled = true; document.getElementById('startActivating').disabled = false; };
-        document.getElementById('btn440').onclick = () => switchRoom('440'); document.getElementById('btn255').onclick = () => switchRoom('255');
-      }
+    // wire up buttons
+    function bindControls() {
+      document.getElementById('startLogging').onclick = function() {
+        currentName = document.getElementById('logNameInput').value.trim();
+        if (!currentName) return;
+        document.getElementById('currentNameDisplay').innerText = `Logging: ${currentName}`;
+        this.disabled = true;
+        document.getElementById('finishLogging').disabled = false;
+      };
+      document.getElementById('finishLogging').onclick = function() {
+        currentName = '';
+        document.getElementById('currentNameDisplay').innerText = '';
+        this.disabled = true;
+        document.getElementById('startLogging').disabled = false;
+      };
+      document.getElementById('startCollecting').onclick = function() {
+        currentCollector = document.getElementById('collectorNameInput').value.trim();
+        if (!currentCollector) return;
+        document.getElementById('collectorDisplay').innerText = `Collecting: ${currentCollector}`;
+        this.disabled = true;
+        document.getElementById('finishCollecting').disabled = false;
+      };
+      document.getElementById('finishCollecting').onclick = function() {
+        currentCollector = '';
+        document.getElementById('collectorDisplay').innerText = '';
+        this.disabled = true;
+        document.getElementById('startCollecting').disabled = false;
+      };
+      document.getElementById('startInactivating').onclick = function() {
+        currentInactivator = document.getElementById('inactiveNameInput').value.trim();
+        if (!currentInactivator) return;
+        document.getElementById('inactivatorDisplay').innerText = `Inactivating: ${currentInactivator}`;
+        this.disabled = true;
+        document.getElementById('finishInactivating').disabled = false;
+      };
+      document.getElementById('finishInactivating').onclick = function() {
+        currentInactivator = '';
+        document.getElementById('inactivatorDisplay').innerText = '';
+        this.disabled = true;
+        document.getElementById('startInactivating').disabled = false;
+      };
+      document.getElementById('startActivating').onclick = function() {
+        currentActivator = document.getElementById('activeNameInput').value.trim();
+        if (!currentActivator) return;
+        document.getElementById('activatorDisplay').innerText = `Activating: ${currentActivator}`;
+        this.disabled = true;
+        document.getElementById('finishActivating').disabled = false;
+      };
+      document.getElementById('finishActivating').onclick = function() {
+        currentActivator = '';
+        document.getElementById('activatorDisplay').innerText = '';
+        this.disabled = true;
+        document.getElementById('startActivating').disabled = false;
+      };
+      document.getElementById('btn440').onclick = () => switchRoom('440');
+      document.getElementById('btn255').onclick = () => switchRoom('255');
+    }
 
-      function switchRoom(room) { document.querySelectorAll('.room-container').forEach(el => el.classList.remove('active')); document.getElementById(`room-${room}`).classList.add('active'); }
+    function switchRoom(room) {
+      document.querySelectorAll('.room-container').forEach(el => el.classList.remove('active'));
+      document.getElementById(`room-${room}`).classList.add('active');
+    }
 
-      // Initialize
-      buildGrids(); bindControls(); updateReady(); setInterval(updateSoonest, 1000); setInterval(() => Object.keys(slots).forEach(updateTimer), 1000);
-    });  …  
-  <script>
-    // all your existing functions:
-    //   buildGrids(), bindControls(), handleClick(), updateTimer(), etc.
+    // ── INITIALIZE ──
+    buildGrids();
+    bindControls();
+    updateReady();
+    setInterval(updateSoonest, 1000);
+    setInterval(() => Object.keys(slots).forEach(updateTimer), 1000);
 
-    // ——— BELOW HERE ———
-    // Immediately fetch shared state, then every 5s
+    // ── POLLING FOR SHARED STATE ──
     fetchState();
     setInterval(fetchState, 5000);
 
@@ -235,12 +330,8 @@
       updateReady();
       updateSoonest();
     }
-    // ——————————————————
 
-  </script>
-</body>
-</html>
-
+  }); // end DOMContentLoaded
   </script>
 </body>
 </html>
