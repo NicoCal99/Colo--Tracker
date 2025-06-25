@@ -199,7 +199,48 @@
 
       // Initialize
       buildGrids(); bindControls(); updateReady(); setInterval(updateSoonest, 1000); setInterval(() => Object.keys(slots).forEach(updateTimer), 1000);
-    });
+    });  …  
+  <script>
+    // all your existing functions:
+    //   buildGrids(), bindControls(), handleClick(), updateTimer(), etc.
+
+    // ——— BELOW HERE ———
+    // Immediately fetch shared state, then every 5s
+    fetchState();
+    setInterval(fetchState, 5000);
+
+    async function fetchState() {
+      try {
+        const res   = await fetch(`${LOG_URL}?mode=getState`);
+        const state = await res.json();
+        applyState(state);
+      } catch (err) {
+        console.error('State fetch failed:', err);
+      }
+    }
+
+    function applyState(state) {
+      Object.entries(state).forEach(([id, { status, end }]) => {
+        const obj = slots[id];
+        if (!obj) return;
+        const el = obj.el;
+        el.classList.toggle('in-use', status === 'in-use');
+        el.classList.toggle('done',   status === 'done');
+        el.classList.toggle('inactive', status === 'inactive');
+        if (status === 'in-use' && end) {
+          obj.end = end;
+          updateTimer(id);
+        }
+      });
+      updateReady();
+      updateSoonest();
+    }
+    // ——————————————————
+
+  </script>
+</body>
+</html>
+
   </script>
 </body>
 </html>
