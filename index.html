@@ -50,17 +50,17 @@
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const DURATION = 30 * 1000;            // 30s countdown
-    const POLL_INTERVAL = 5000;            // 5s polling
+    const DURATION = 30 * 1000;        // 30s countdown
+    const POLL_INTERVAL = 5000;        // 5s polling
     const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
 
     const rooms = ['440', '255'];
     const rows  = ['A','B','C','D','E','F'];
     const slots = {};
-    const seen  = {};   // track timers already started
+    const seen  = {};  // timers already started
     let uploader='', collector='', inactivator='', activator='';
 
-    // Control buttons
+    // Control handlers
     document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
     document.getElementById('finishLogging').onclick = () => { uploader = ''; };
     document.getElementById('beginCollecting').onclick = () => { collector = document.getElementById('collectorInput').value.trim(); };
@@ -70,6 +70,7 @@
     document.getElementById('markActive').onclick = () => { activator = document.getElementById('activatorInput').value.trim(); };
     document.getElementById('finishActivating').onclick = () => { activator = ''; };
 
+    // Send an event to backend
     function logEvent(action, id) {
       const user = uploader || collector || inactivator || activator;
       if (!action || !user) return;
@@ -78,6 +79,7 @@
       fetch(`${LOG_URL}?${params}`).catch(console.error);
     }
 
+    // Create slot DOM
     function createSlot(id, container) {
       const el = document.createElement('div');
       el.className = 'slot';
@@ -87,31 +89,33 @@
       slots[id] = { id, el, end: 0, iv: null };
     }
 
-    function startTimer(slotObj) {
-      clearInterval(slotObj.iv);
+    // Start countdown for a slot
+    function startTimer(s) {
+      clearInterval(s.iv);
       function tick() {
-        const remaining = slotObj.end - Date.now();
-        if (remaining <= 0) {
-          clearInterval(slotObj.iv);
-          slotObj.el.classList.replace('in-use', 'done');
-          slotObj.el.querySelector('.timer').textContent = '';
-          seen[slotObj.id] = false;
-          logEvent('upload_done', slotObj.id);
-          return;
+        const rem = s.end - Date.now();
+        if (rem <= 0) {
+          clearInterval(s.iv);
+          s.el.classList.replace('in-use','done');
+          s.el.querySelector('.timer').textContent = '';
+          seen[s.id] = false;
+          logEvent('upload_done', s.id);
+        } else {
+          s.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
         }
-        slotObj.el.querySelector('.timer').textContent = Math.ceil(remaining / 1000) + 's';
       }
       tick();
-      slotObj.iv = setInterval(tick, 1000);
+      s.iv = setInterval(tick, 1000);
     }
 
+    // Handle click based on mode
     function handleClick(id) {
       const s = slots[id];
       if (uploader) {
-        s.el.classList.remove('done', 'inactive');
+        s.el.classList.remove('done','inactive');
         s.el.classList.add('in-use');
         s.end = Date.now() + DURATION;
-        seen[id] = false;           // allow timer start
+        seen[id] = false;
         logEvent('upload_started', id);
         startTimer(s);
       } else if (collector && s.el.classList.contains('done')) {
@@ -125,49 +129,39 @@
       }
     }
 
-    // Build grids
+    // Build grid UI
     rooms.forEach(room => {
       const container = document.getElementById(`grids-${room}`);
-      rows.forEach(row => {
-        for (let i = 1; i <= 6; i++) createSlot(`${room}-${row}${i}`, container);
-      });
+      rows.forEach(row => { for (let i = 1; i <= 6; i++) createSlot(`${room}-${row}${i}`, container); });
     });
 
-    // Polling state without resetting existing timers
+    // Fetch state and apply changes without resetting existing timers
     function refreshState() {
       fetch(`${LOG_URL}?mode=getState`)
         .then(r => r.json())
         .then(state => {
-          Object.entries(state).forEach(([id, {status, end}]) => {
-            const s = slots[id];
-            if (!s) return;
-            // Clear visual classes
-            s.el.classList.remove('in-use', 'done', 'inactive');
-            s.el.querySelector('.timer').textContent = '';
-            // Apply status
+          Object.entries(state).forEach(([id,{status,end}]) => {
+            const s = slots[id]; if (!s) return;
             if (status === 'in-use') {
-              s.el.classList.add('in-use');
-              // start timer only once per session
               if (!seen[id]) {
-                seen[id] = true;
+                s.el.classList.remove('done','inactive');
+                s.el.classList.add('in-use');
                 s.end = end;
+                seen[id] = true;
                 startTimer(s);
               }
-            } else if (status === 'done') {
-              s.el.classList.add('done');
-              clearInterval(s.iv);
-              seen[id] = false;
-            } else if (status === 'inactive') {
-              s.el.classList.add('inactive');
-              clearInterval(s.iv);
-              seen[id] = false;
+            } else {
+              if (seen[id]) { clearInterval(s.iv); seen[id] = false; }
+              s.el.classList.remove('in-use');
+              s.el.querySelector('.timer').textContent = '';
+              s.el.classList.toggle('done', status === 'done');
+              s.el.classList.toggle('inactive', status === 'inactive');
             }
           });
-        })
-        .catch(console.error);
+        }).catch(console.error);
     }
 
-    // Initial load & polling
+    // Initial load & periodic polling
     refreshState();
     setInterval(refreshState, POLL_INTERVAL);
   });
