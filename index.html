@@ -13,6 +13,7 @@
       margin-bottom: 24px;
     }
     .slot {
+      position: relative;
       border: 1px solid #ccc;
       border-radius: 4px;
       display: flex;
@@ -27,7 +28,7 @@
     .slot.done      { background-color: lightblue; }
     .slot.inactive  { background-color: lightgray; }
     .slot .content  { font-size: 14px; font-weight: bold; }
-    .slot .timer    { font-size: 12px; margin-top: 4px; }
+    .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; }
     body { font-family: sans-serif; padding: 16px; }
     #controls { margin-bottom: 16px; }
     #controls input, #controls button { padding: 4px 8px; margin-right: 8px; }
@@ -47,7 +48,7 @@
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const DURATION = 30 * 1000;
+    const DURATION = 30 * 1000; // 30 seconds
     const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
     const rows     = ['A','B','C','D','E','F'];
     const slots    = {};
@@ -56,16 +57,35 @@
     // Begin Logging: store name
     document.getElementById('beginLogging').onclick = () => {
       currentName = document.getElementById('nameInput').value.trim();
-      if (!currentName) alert('Please enter a name before logging');
+      if (!currentName) alert('Please enter a name');
     };
 
-    // Function to log events
+    // Utility: send event to server
     function logEvent(action, id) {
       if (!action || !currentName) return;
-      const room     = id.split('-')[0];
-      const slot     = slots[id].label;
-      const params   = new URLSearchParams({ action, room, slot, uploader: currentName });
+      const room   = id.split('-')[0];
+      const slot   = slots[id].label;
+      const params = new URLSearchParams({ action, room, slot, uploader: currentName });
       fetch(`${LOG_URL}?${params}`).catch(console.error);
+    }
+
+    // Start countdown and log upload_done when done
+    function startTimer(slotObj) {
+      clearInterval(slotObj.iv);
+      function tick() {
+        const remaining = slotObj.end - Date.now();
+        if (remaining <= 0) {
+          clearInterval(slotObj.iv);
+          slotObj.el.classList.remove('in-use');
+          slotObj.el.classList.add('done');
+          slotObj.el.querySelector('.timer').textContent = '';
+          logEvent('upload_done', slotObj.id);
+          return;
+        }
+        slotObj.el.querySelector('.timer').textContent = Math.ceil(remaining/1000) + 's';
+      }
+      tick();
+      slotObj.iv = setInterval(tick, 1000);
     }
 
     // Create a slot element
@@ -75,41 +95,49 @@
       const el         = document.createElement('div');
       el.className     = 'slot';
       el.innerHTML     = `<div class="content">${label}</div><div class="timer"></div>`;
-      el.onclick       = () => handleClick(id);
       container.appendChild(el);
-      slots[id] = { el, label, end: 0, iv: null };
+      slots[id] = { id, el, label, end: 0, iv: null };
+      el.onclick = () => handleClick(id);
     }
 
-    // Handle slot clicks for upload_started
+    // Handle slot clicks (upload_started)
     function handleClick(id) {
-      if (!currentName) return alert('Start logging with a name first');
+      if (!currentName) return alert('Enter name first');
       const slotObj = slots[id];
-      slotObj.el.classList.remove('done', 'inactive');
+      clearInterval(slotObj.iv);
+      slotObj.el.classList.remove('done','inactive');
       slotObj.el.classList.add('in-use');
+      slotObj.end = Date.now() + DURATION;
       logEvent('upload_started', id);
+      startTimer(slotObj);
     }
 
     // Build grids for each room
     ['440','255'].forEach(room => {
       const container = document.getElementById(`grids-${room}`);
       rows.forEach(row => {
-        for (let i = 1; i <= 6; i++) {
-          createSlot(`${room}-${row}${i}`, container);
-        }
+        for (let i = 1; i <= 6; i++) createSlot(`${room}-${row}${i}`, container);
       });
     });
 
-    // On load: fetch state and apply classes
+    // On load: fetch STATE and apply statuses + timers
     fetch(`${LOG_URL}?mode=getState`)
       .then(r => r.json())
       .then(stateData => {
-        Object.entries(stateData).forEach(([id, {status}]) => {
+        Object.entries(stateData).forEach(([id,{status,end}]) => {
           const slotObj = slots[id];
           if (!slotObj) return;
-          slotObj.el.classList.remove('in-use', 'done', 'inactive');
-          if (status === 'in-use')   slotObj.el.classList.add('in-use');
-          if (status === 'done')     slotObj.el.classList.add('done');
-          if (status === 'inactive') slotObj.el.classList.add('inactive');
+          slotObj.el.classList.remove('in-use','done','inactive');
+          slotObj.el.querySelector('.timer').textContent = '';
+          if (status === 'in-use') {
+            slotObj.el.classList.add('in-use');
+            slotObj.end = end;
+            startTimer(slotObj);
+          } else if (status === 'done') {
+            slotObj.el.classList.add('done');
+          } else if (status === 'inactive') {
+            slotObj.el.classList.add('inactive');
+          }
         });
       })
       .catch(console.error);
