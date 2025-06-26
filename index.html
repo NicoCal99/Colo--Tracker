@@ -2,34 +2,51 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Server Slot Tracker</title>
   <style>
-    /* Your existing styles here */
-    .slot { display: inline-block; margin: 4px; width: 40px; height: 60px; text-align: center; cursor: pointer; }
-    .slot .content { font-size: 12px; }
-    .slot .timer { font-size: 10px; }
-    .in-use { background: lightcoral; }
-    .done   { background: lightblue; }
-    .inactive { background: lightgray; }
+    /* Grid container for slots */
+    .grids {
+      display: grid;
+      grid-template-columns: repeat(6, 60px);
+      grid-auto-rows: 80px;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    /* Individual slot styling */
+    .slot {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      background-color: #e0ffe0;
+    }
+    .slot.in-use { background-color: lightcoral; }
+    .slot.done   { background-color: lightblue; }
+    .slot.inactive { background-color: lightgray; }
+    .slot .content { font-size: 14px; font-weight: bold; }
+    .slot .timer   { font-size: 12px; margin-top: 4px; }
+    body { font-family: sans-serif; padding: 16px; }
+    #controls { margin-bottom: 16px; }
+    #controls input { padding: 4px 8px; }
+    #controls button { margin-left: 8px; padding: 4px 8px; }
   </style>
 </head>
 <body>
-  <!-- Your existing HTML structure here -->
   <div id="controls">
     <input id="nameInput" placeholder="Uploader name…">
     <button id="beginLogging">Begin Logging</button>
     <button id="finishLogging">Finish Logging</button>
-    <!-- etc. -->
   </div>
-  <div id="room-440" class="room-container active">
-    <h2>Room 440</h2>
-    <div id="grids-440" class="grids"></div>
-  </div>
-  <div id="room-255" class="room-container">
-    <h2>Room 255</h2>
-    <div id="grids-255" class="grids"></div>
-  </div>
+
+  <h2>Room 440</h2>
+  <div id="grids-440" class="grids"></div>
+
+  <h2>Room 255</h2>
+  <div id="grids-255" class="grids"></div>
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
@@ -37,18 +54,26 @@
     const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
     const rows     = ['A','B','C','D','E','F'];
     const slots    = {};
-    let currentName = '', currentCollector = '', currentInactivator = '', currentActivator = '';
+    let currentName = '';
 
+    // Begin Logging: store name
+    document.getElementById('beginLogging').onclick = () => {
+      currentName = document.getElementById('nameInput').value.trim();
+      if (!currentName) alert('Please enter a name before logging');
+    };
+
+    // Core - send debug alert + fetch
     function logEvent(action, id) {
       if (!action) return;
       const room     = id.split('-')[0];
       const slot     = slots[id].label;
-      const uploader = currentName || currentCollector || currentInactivator || currentActivator;
+      const uploader = currentName;
+      if (!uploader) { alert('Start logging with a name first'); return; }
       const params   = new URLSearchParams({ action, room, slot, uploader });
+      const url      = `${LOG_URL}?${params}`;
 
-      // DEBUG: show exact URL being fetched
-      const url = `${LOG_URL}?${params}`;
-      alert('Calling API:\n' + url);
+      // DEBUG: show the exact URL being requested
+      alert('Calling API with URL:\n' + url);
 
       fetch(url)
         .then(r => r.json())
@@ -56,6 +81,7 @@
         .catch(console.error);
     }
 
+    // Slot creation
     function createSlot(id, container) {
       const [srv, lab] = id.split('-');
       const label      = `${srv}-${lab}`;
@@ -64,17 +90,19 @@
       el.innerHTML     = `<div class="content">${label}</div><div class="timer"></div>`;
       el.onclick       = () => handleClick(id);
       container.appendChild(el);
-      slots[id] = { el, label, end:0, iv:null };
+      slots[id] = { el, label, end: 0, iv: null };
     }
 
+    // Click handler stub: mark in-use then log
     function handleClick(id) {
-      const s = slots[id].el;
-      // ... your existing logic to determine 'action' and class toggles ...
-      // then call:
+      const s = slots[id];
+      // For debug: always treat click as upload_started
+      const action = 'upload_started';
+      s.el.classList.add('in-use');
       logEvent(action, id);
     }
 
-    // Build grids
+    // Build grid for each room
     ['440','255'].forEach(room => {
       const container = document.getElementById(`grids-${room}`);
       rows.forEach(row => {
@@ -83,9 +111,6 @@
         }
       });
     });
-
-    // Wire up control buttons (Begin Logging, Finish Logging, etc.)
-    // … your existing event listeners here …
   });
   </script>
 </body>
