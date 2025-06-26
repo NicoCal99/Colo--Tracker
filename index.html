@@ -50,8 +50,8 @@
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const DURATION = 30 * 1000;        // 30s countdown
-    const POLL_INTERVAL = 5000;        // 5s polling
+    const DURATION = 30 * 1000;
+    const POLL_INTERVAL = 5000;
     const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
 
     const rooms = ['440', '255'];
@@ -60,7 +60,6 @@
     const seen  = {};  // track timers started
     let uploader = '', collector = '', inactivator = '', activator = '';
 
-    // Control handlers
     document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
     document.getElementById('finishLogging').onclick = () => { uploader = ''; };
     document.getElementById('beginCollecting').onclick = () => { collector = document.getElementById('collectorInput').value.trim(); };
@@ -70,7 +69,6 @@
     document.getElementById('markActive').onclick = () => { activator = document.getElementById('activatorInput').value.trim(); };
     document.getElementById('finishActivating').onclick = () => { activator = ''; };
 
-    // Send event to server
     function logEvent(action, id) {
       const user = uploader || collector || inactivator || activator;
       if (!action || !user) return;
@@ -79,7 +77,6 @@
       fetch(`${LOG_URL}?${params}`).catch(console.error);
     }
 
-    // Create slot DOM
     function createSlot(id, container) {
       const el = document.createElement('div');
       el.className = 'slot';
@@ -89,10 +86,9 @@
       slots[id] = { id, el, end: 0, iv: null };
     }
 
-    // Start a countdown timer (only once)
     function startTimer(s) {
       clearInterval(s.iv);
-      seen[s.id] = true;  // mark timer started
+      seen[s.id] = true;
       function tick() {
         const rem = s.end - Date.now();
         if (rem <= 0) {
@@ -109,7 +105,6 @@
       s.iv = setInterval(tick, 1000);
     }
 
-    // Handle clicks in different modes
     function handleClick(id) {
       const s = slots[id];
       if (uploader) {
@@ -119,6 +114,7 @@
         logEvent('upload_started', id);
         startTimer(s);
       } else if (collector && s.el.classList.contains('done')) {
+        s.el.classList.remove('done');
         logEvent('collected', id);
       } else if (inactivator && !s.el.classList.contains('in-use') && !s.el.classList.contains('done')) {
         s.el.classList.add('inactive');
@@ -129,13 +125,11 @@
       }
     }
 
-    // Build grid slots
     rooms.forEach(room => {
       const container = document.getElementById(`grids-${room}`);
       rows.forEach(row => { for (let i=1; i<=6; i++) createSlot(`${room}-${row}${i}`, container); });
     });
 
-    // Refresh state without restarting existing timers
     function refreshState() {
       fetch(`${LOG_URL}?mode=getState`)
         .then(r=>r.json())
@@ -160,7 +154,6 @@
         }).catch(console.error);
     }
 
-    // Initial load & periodic polling
     refreshState();
     setInterval(refreshState, POLL_INTERVAL);
   });
