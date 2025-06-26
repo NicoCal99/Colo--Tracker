@@ -51,13 +51,14 @@
   <script>
   document.addEventListener('DOMContentLoaded', () => {
     const DURATION = 30 * 1000;
+    const POLL_INTERVAL = 5000; // 5s polling
     const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
     const rooms    = ['440', '255'];
     const rows     = ['A','B','C','D','E','F'];
     const slots    = {};
     let uploader='', collector='', inactivator='', activator='';
 
-    // Wire up control buttons
+    // control wiring
     document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
     document.getElementById('finishLogging').onclick = () => { uploader = ''; };
     document.getElementById('beginCollecting').onclick = () => { collector = document.getElementById('collectorInput').value.trim(); };
@@ -67,6 +68,7 @@
     document.getElementById('markActive').onclick = () => { activator = document.getElementById('activatorInput').value.trim(); };
     document.getElementById('finishActivating').onclick = () => { activator = ''; };
 
+    // send event
     function logEvent(action, id) {
       const user = uploader || collector || inactivator || activator;
       if (!action || !user) return;
@@ -75,40 +77,41 @@
       fetch(`${LOG_URL}?${params}`).catch(console.error);
     }
 
+    // slot creation
     function createSlot(id, container) {
-      const [room, lab] = id.split('-');
-      const label = id;
-      const el = document.createElement('div'); el.className = 'slot';
-      el.innerHTML = `<div class="content">${label}</div><div class="timer"></div>`;
+      const el = document.createElement('div');
+      el.className = 'slot';
+      el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
       el.onclick = () => handleClick(id);
       container.appendChild(el);
-      slots[id] = { id, el, end: 0, iv: null };
+      slots[id] = { id, el, end:0, iv:null };
     }
 
+    // countdown
     function startTimer(slotObj) {
       clearInterval(slotObj.iv);
       function tick() {
         const rem = slotObj.end - Date.now();
         if (rem <= 0) {
           clearInterval(slotObj.iv);
-          slotObj.el.classList.remove('in-use');
-          slotObj.el.classList.add('done');
+          slotObj.el.classList.replace('in-use','done');
           slotObj.el.querySelector('.timer').textContent = '';
           logEvent('upload_done', slotObj.id);
           return;
         }
-        slotObj.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
+        slotObj.el.querySelector('.timer').textContent = Math.ceil(rem/1000)+'s';
       }
       tick();
-      slotObj.iv = setInterval(tick, 1000);
+      slotObj.iv = setInterval(tick,1000);
     }
 
+    // click handler
     function handleClick(id) {
       const slotObj = slots[id];
       if (uploader) {
         slotObj.el.classList.remove('done','inactive');
         slotObj.el.classList.add('in-use');
-        slotObj.end = Date.now() + DURATION;
+        slotObj.end = Date.now()+DURATION;
         logEvent('upload_started', id);
         startTimer(slotObj);
       } else if (collector && slotObj.el.classList.contains('done')) {
@@ -123,29 +126,30 @@
       }
     }
 
-    // Build grids
-    rooms.forEach(room => {
-      const container = document.getElementById(`grids-${room}`);
-      rows.forEach(row => {
-        for (let i=1;i<=6;i++) createSlot(`${room}-${row}${i}`, container);
-      });
+    // build grid
+    rooms.forEach(r => {
+      const c = document.getElementById(`grids-${r}`);
+      rows.forEach(row=>{ for(let i=1;i<=6;i++) createSlot(`${r}-${row}${i}`,c) });
     });
 
-    // On load, fetch state & apply
-    fetch(`${LOG_URL}?mode=getState`)
-      .then(r=>r.json())
-      .then(state=>{
-        Object.entries(state).forEach(([id,{status,end,user}])=>{
-          const slotObj=slots[id]; if(!slotObj) return;
-          slotObj.el.classList.remove('in-use','done','inactive');
-          slotObj.el.querySelector('.timer').textContent = '';
-          if(status==='in-use') { slotObj.el.classList.add('in-use'); slotObj.end=end; startTimer(slotObj); }
-          else if(status==='done')    slotObj.el.classList.add('done');
-          else if(status==='inactive')slotObj.el.classList.add('inactive');
-        });
-      })
-      .catch(console.error);
+    // fetch & apply state
+    function refreshState(){
+      fetch(`${LOG_URL}?mode=getState`)
+        .then(r=>r.json())
+        .then(state=>{
+          Object.entries(state).forEach(([id,{status,end}])=>{
+            const s=slots[id]; if(!s) return;
+            s.el.classList.remove('in-use','done','inactive'); s.el.querySelector('.timer').textContent='';
+            if(status==='in-use'){ s.el.classList.add('in-use'); s.end=end; startTimer(s); }
+            else if(status==='done')    s.el.classList.add('done');
+            else if(status==='inactive')s.el.classList.add('inactive');
+          });
+        }).catch(console.error);
+    }
 
+    // initial load & polling
+    refreshState();
+    setInterval(refreshState, POLL_INTERVAL);
   });
   </script>
 </body>
