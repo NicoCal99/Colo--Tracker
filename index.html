@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <title>Server Slot Tracker</title>
   <style>
-    /* Grid container for slots */
     .grids {
       display: grid;
       grid-template-columns: repeat(6, 60px);
@@ -13,7 +12,6 @@
       gap: 8px;
       margin-bottom: 24px;
     }
-    /* Individual slot styling */
     .slot {
       border: 1px solid #ccc;
       border-radius: 4px;
@@ -23,23 +21,22 @@
       align-items: center;
       cursor: pointer;
       background-color: #e0ffe0;
+      transition: background-color 0.2s;
     }
-    .slot.in-use { background-color: lightcoral; }
-    .slot.done   { background-color: lightblue; }
-    .slot.inactive { background-color: lightgray; }
-    .slot .content { font-size: 14px; font-weight: bold; }
-    .slot .timer   { font-size: 12px; margin-top: 4px; }
+    .slot.in-use    { background-color: lightcoral; }
+    .slot.done      { background-color: lightblue; }
+    .slot.inactive  { background-color: lightgray; }
+    .slot .content  { font-size: 14px; font-weight: bold; }
+    .slot .timer    { font-size: 12px; margin-top: 4px; }
     body { font-family: sans-serif; padding: 16px; }
     #controls { margin-bottom: 16px; }
-    #controls input { padding: 4px 8px; }
-    #controls button { margin-left: 8px; padding: 4px 8px; }
+    #controls input, #controls button { padding: 4px 8px; margin-right: 8px; }
   </style>
 </head>
 <body>
   <div id="controls">
     <input id="nameInput" placeholder="Uploader name…">
     <button id="beginLogging">Begin Logging</button>
-    <button id="finishLogging">Finish Logging</button>
   </div>
 
   <h2>Room 440</h2>
@@ -62,26 +59,16 @@
       if (!currentName) alert('Please enter a name before logging');
     };
 
-    // Core - send debug alert + fetch
+    // Function to log events
     function logEvent(action, id) {
-      if (!action) return;
+      if (!action || !currentName) return;
       const room     = id.split('-')[0];
       const slot     = slots[id].label;
-      const uploader = currentName;
-      if (!uploader) { alert('Start logging with a name first'); return; }
-      const params   = new URLSearchParams({ action, room, slot, uploader });
-      const url      = `${LOG_URL}?${params}`;
-
-      // DEBUG: show the exact URL being requested
-      alert('Calling API with URL:\n' + url);
-
-      fetch(url)
-        .then(r => r.json())
-        .then(data => console.log('Response:', data))
-        .catch(console.error);
+      const params   = new URLSearchParams({ action, room, slot, uploader: currentName });
+      fetch(`${LOG_URL}?${params}`).catch(console.error);
     }
 
-    // Slot creation
+    // Create a slot element
     function createSlot(id, container) {
       const [srv, lab] = id.split('-');
       const label      = `${srv}-${lab}`;
@@ -93,16 +80,16 @@
       slots[id] = { el, label, end: 0, iv: null };
     }
 
-    // Click handler stub: mark in-use then log
+    // Handle slot clicks for upload_started
     function handleClick(id) {
-      const s = slots[id];
-      // For debug: always treat click as upload_started
-      const action = 'upload_started';
-      s.el.classList.add('in-use');
-      logEvent(action, id);
+      if (!currentName) return alert('Start logging with a name first');
+      const slotObj = slots[id];
+      slotObj.el.classList.remove('done', 'inactive');
+      slotObj.el.classList.add('in-use');
+      logEvent('upload_started', id);
     }
 
-    // Build grid for each room
+    // Build grids for each room
     ['440','255'].forEach(room => {
       const container = document.getElementById(`grids-${room}`);
       rows.forEach(row => {
@@ -111,6 +98,21 @@
         }
       });
     });
+
+    // On load: fetch state and apply classes
+    fetch(`${LOG_URL}?mode=getState`)
+      .then(r => r.json())
+      .then(stateData => {
+        Object.entries(stateData).forEach(([id, {status}]) => {
+          const slotObj = slots[id];
+          if (!slotObj) return;
+          slotObj.el.classList.remove('in-use', 'done', 'inactive');
+          if (status === 'in-use')   slotObj.el.classList.add('in-use');
+          if (status === 'done')     slotObj.el.classList.add('done');
+          if (status === 'inactive') slotObj.el.classList.add('inactive');
+        });
+      })
+      .catch(console.error);
   });
   </script>
 </body>
