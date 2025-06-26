@@ -57,8 +57,8 @@
     const rooms = ['440', '255'];
     const rows  = ['A','B','C','D','E','F'];
     const slots = {};
-    const seen  = {};  // timers already started
-    let uploader='', collector='', inactivator='', activator='';
+    const seen  = {};  // track timers started
+    let uploader = '', collector = '', inactivator = '', activator = '';
 
     // Control handlers
     document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
@@ -70,7 +70,7 @@
     document.getElementById('markActive').onclick = () => { activator = document.getElementById('activatorInput').value.trim(); };
     document.getElementById('finishActivating').onclick = () => { activator = ''; };
 
-    // Send an event to backend
+    // Send event to server
     function logEvent(action, id) {
       const user = uploader || collector || inactivator || activator;
       if (!action || !user) return;
@@ -84,21 +84,22 @@
       const el = document.createElement('div');
       el.className = 'slot';
       el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
-      el.onclick = () => handleClick(id);
       container.appendChild(el);
+      el.onclick = () => handleClick(id);
       slots[id] = { id, el, end: 0, iv: null };
     }
 
-    // Start countdown for a slot
+    // Start a countdown timer (only once)
     function startTimer(s) {
       clearInterval(s.iv);
+      seen[s.id] = true;  // mark timer started
       function tick() {
         const rem = s.end - Date.now();
         if (rem <= 0) {
           clearInterval(s.iv);
-          s.el.classList.replace('in-use','done');
+          s.el.classList.replace('in-use', 'done');
           s.el.querySelector('.timer').textContent = '';
-          seen[s.id] = false;
+          delete seen[s.id];
           logEvent('upload_done', s.id);
         } else {
           s.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
@@ -108,14 +109,13 @@
       s.iv = setInterval(tick, 1000);
     }
 
-    // Handle click based on mode
+    // Handle clicks in different modes
     function handleClick(id) {
       const s = slots[id];
       if (uploader) {
         s.el.classList.remove('done','inactive');
         s.el.classList.add('in-use');
         s.end = Date.now() + DURATION;
-        seen[id] = false;
         logEvent('upload_started', id);
         startTimer(s);
       } else if (collector && s.el.classList.contains('done')) {
@@ -129,33 +129,32 @@
       }
     }
 
-    // Build grid UI
+    // Build grid slots
     rooms.forEach(room => {
       const container = document.getElementById(`grids-${room}`);
-      rows.forEach(row => { for (let i = 1; i <= 6; i++) createSlot(`${room}-${row}${i}`, container); });
+      rows.forEach(row => { for (let i=1; i<=6; i++) createSlot(`${room}-${row}${i}`, container); });
     });
 
-    // Fetch state and apply changes without resetting existing timers
+    // Refresh state without restarting existing timers
     function refreshState() {
       fetch(`${LOG_URL}?mode=getState`)
-        .then(r => r.json())
-        .then(state => {
-          Object.entries(state).forEach(([id,{status,end}]) => {
-            const s = slots[id]; if (!s) return;
-            if (status === 'in-use') {
-              if (!seen[id]) {
+        .then(r=>r.json())
+        .then(state=>{
+          Object.entries(state).forEach(([id,{status,end}])=>{
+            const s = slots[id]; if(!s) return;
+            if(status==='in-use'){
+              if(!seen[id]){
                 s.el.classList.remove('done','inactive');
                 s.el.classList.add('in-use');
                 s.end = end;
-                seen[id] = true;
                 startTimer(s);
               }
             } else {
-              if (seen[id]) { clearInterval(s.iv); seen[id] = false; }
+              if(seen[id]){ clearInterval(s.iv); delete seen[id]; }
               s.el.classList.remove('in-use');
-              s.el.querySelector('.timer').textContent = '';
-              s.el.classList.toggle('done', status === 'done');
-              s.el.classList.toggle('inactive', status === 'inactive');
+              s.el.querySelector('.timer').textContent='';
+              s.el.classList.toggle('done', status==='done');
+              s.el.classList.toggle('inactive', status==='inactive');
             }
           });
         }).catch(console.error);
