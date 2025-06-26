@@ -91,68 +91,68 @@
   <script>
   document.addEventListener('DOMContentLoaded', () => {
     const DURATION = 30*1000;
-    const LOG_URL = "https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec";
+    const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
     const rows     = ['A','B','C','D','E','F'];
     const slots    = {};
     let currentName='', currentCollector='', currentInactivator='', currentActivator='';
     let collectedCount=0, inactiveCount=0, activatedCount=0;
 
-    function logEvent(action,id){
-      if(!action) return;
-      const room=id.split('-')[0], slot=slots[id].label;
-      const user=currentName||currentCollector||currentInactivator||currentActivator;
-      if(!user) return;
-      const qs=new URLSearchParams({action,room,slot,user});
-      fetch(`${LOG_URL}?${qs}`).catch(console.error);
+    function logEvent(action, id) {
+      if (!action) return;
+      const room = id.split('-')[0];
+      const slot = slots[id].label;
+      const uploader = currentName || currentCollector || currentInactivator || currentActivator;
+      if (!uploader) return;
+      const params = new URLSearchParams({action, room, slot, uploader});
+      fetch(`${LOG_URL}?${params}`).catch(console.error);
     }
 
-    function createSlot(id,container){
-      const [,srv,lab]=id.split('-'), label=`S${srv}-${lab}`;
-      const el=document.createElement('div');
-      el.className='slot';
+    function createSlot(id, container) {
+      const [,srv,lab] = id.split('-'), label=`S${srv}-${lab}`;
+      const el = document.createElement('div'); el.className='slot';
       el.innerHTML=`<div class="content"><div>${label}</div><div class="timer"></div></div>`;
-      el.onclick=()=>handleClick(id);
+      el.onclick = () => handleClick(id);
       container.appendChild(el);
-      slots[id]={el,label,end:0,iv:null};
+      slots[id] = {el, label, end:0, iv:null};
     }
 
-    function handleClick(id){
+    function handleClick(id) {
       const o=slots[id], el=o.el;
-      if(currentInactivator && !el.classList.contains('in-use') && !el.classList.contains('done')){
+      if (currentInactivator && !el.classList.contains('in-use') && !el.classList.contains('done')) {
         el.classList.add('inactive');
         inactiveCount++; document.getElementById('inactiveCountDisplay').innerText=`Marked: ${inactiveCount}`;
-        logEvent('inactivated',id); return;
+        logEvent('inactivated', id); return;
       }
-      if(currentActivator && el.classList.contains('inactive')){
+      if (currentActivator && el.classList.contains('inactive')) {
         el.classList.remove('inactive');
         activatedCount++; document.getElementById('activatedCountDisplay').innerText=`Activated: ${activatedCount}`;
-        logEvent('activated',id); return;
+        logEvent('activated', id); return;
       }
-      if(el.classList.contains('done')){
-        if(!currentCollector) return;
+      if (el.classList.contains('done')) {
+        if (!currentCollector) return;
         el.classList.remove('done');
         collectedCount++; document.getElementById('collectedCountDisplay').innerText=`Collected: ${collectedCount}`;
-        logEvent('collected',id); updateReady(); return;
+        logEvent('collected', id); updateReady(); return;
       }
-      if(!currentName||el.classList.contains('in-use')||el.classList.contains('inactive')) return;
+      if (!currentName || el.classList.contains('in-use') || el.classList.contains('inactive')) return;
       el.classList.add('in-use');
-      o.end=Date.now()+DURATION;
-      o.iv=setInterval(()=>updateTimer(id),500);
-      logEvent('upload_started',id);
+      o.end = Date.now() + DURATION;
+      o.iv = setInterval(()=>updateTimer(id), 500);
+      logEvent('upload_started', id);
     }
 
-    function updateTimer(id){
-      const o=slots[id]; if(!o.end) return;
+    function updateTimer(id) {
+      const o=slots[id]; if (!o.end) return;
       const rem=o.end-Date.now();
       o.el.querySelector('.timer').innerText=`${Math.ceil(rem/1000)}s`;
-      if(rem<=0){
+      if (rem<=0) {
         clearInterval(o.iv); o.end=0;
         o.el.classList.remove('in-use'); o.el.classList.add('done');
-        logEvent('upload_done',id); updateReady();
+        logEvent('upload_done', id); updateReady();
       }
     }
 
-    function updateSoonest(){
+    function updateSoonest() {
       const ul=document.getElementById('soonestList'); ul.innerHTML='';
       Object.entries(slots)
         .filter(([_k,v])=>v.el.classList.contains('in-use'))
@@ -165,7 +165,7 @@
         });
     }
 
-    function updateReady(){
+    function updateReady() {
       const doneAll=Object.values(slots).filter(v=>v.el.classList.contains('done')).length;
       document.getElementById('readyCount-global').innerText=doneAll;
       const done440=Object.entries(slots).filter(([k,v])=>k.startsWith('440-')&&v.el.classList.contains('done')).length;
@@ -174,7 +174,7 @@
       document.getElementById('readyCount-255').innerText=`Room 255: ${done255}`;
     }
 
-    function buildGrids(){
+    function buildGrids() {
       const c440=document.getElementById('grids-440');
       for(let i=1;i<=6;i++){
         const wrap=document.createElement('div'); wrap.className='grid-wrapper';
@@ -259,12 +259,10 @@
     }
     function applyState(state){
       Object.entries(state).forEach(([id,{status,end}])=>{
-        const obj=slots[id]; if(!obj) return;
+        const obj=slots[id]; if(!obj)return;
         const el=obj.el;
-        // only set classes when sheet says so; leave others untouched
         if(status==='in-use'){
-          el.classList.add('in-use');
-          obj.end=end; updateTimer(id);
+          el.classList.add('in-use'); obj.end=end; updateTimer(id);
         } else if(status==='done'){
           el.classList.add('done');
         } else if(status==='inactive'){
