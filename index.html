@@ -167,7 +167,7 @@
           if (mode==='upload')      { slots[id].state='in-use'; slots[id].end=Date.now()+DURATION; updateUI(slots[id]); logEvent('upload_started',room,sli,name); }
           else if (mode==='collect' && slots[id].state==='done') { slots[id].state='idle'; updateUI(slots[id]); logEvent('collected',room,sli,name); }
           else if (mode==='activate')   { slots[id].state='idle'; updateUI(slots[id]); logEvent('activated',room,sli,name); }
-          else if (mode==='deactivate') { slots[id].state='inactive'; updateUI(slots[id]); logEvent('deactivated',room,sli,name); }
+          else if (mode==='deactivate') { slots[id].state='inactive'; updateUI(slots[id]); logEvent('inactivated', room, sli, name); }
           updateCounts();
           updateNext();
         };
@@ -246,7 +246,7 @@
         Object.values(slots).forEach(s=>{
           if(s.state==='in-use'){
             const rem=s.end-now;
-            if(rem<=0){ s.state='done'; updateUI(s); const [rid,srv,sli]=s.id.split('-'); logEvent('upload_done',`${rid}-${srv}`,sli, null); changed=true; }
+            if(rem<=0){ s.state='done'; updateUI(s); const [rid,srv,sli]=s.id.split('-'); logEvent('upload_done', `${rid}-${srv}`, sli, ''); changed=true; }
             else s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;
           }
         });
