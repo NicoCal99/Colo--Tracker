@@ -16,7 +16,7 @@
     .slot.done      { background-color: lightblue; }
     .slot.inactive  { background-color: lightgray; }
     .slot .content  { font-size: 14px; font-weight: bold; }
-    .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; }
+    .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -93,8 +93,15 @@
       slots[id] = { id, el, end: 0, iv: null, status: 'idle' };
     }
 
+    function clearTimer(s) {
+      if (s.iv) {
+        clearInterval(s.iv);
+        s.iv = null;
+      }
+    }
+
     function startTimer(s) {
-      clearInterval(s.iv);
+      clearTimer(s);
       seen[s.id] = true;
       s.status = 'in-use';
       s.el.classList.remove('done','inactive');
@@ -103,7 +110,7 @@
       function tick() {
         const rem = s.end - Date.now();
         if (rem <= 0) {
-          clearInterval(s.iv);
+          clearTimer(s);
           s.el.classList.remove('in-use');
           s.el.classList.add('done');
           s.el.querySelector('.timer').textContent = '';
@@ -133,6 +140,7 @@
           setOverride(id);
           s.el.classList.remove('done','in-use','inactive');
           s.el.querySelector('.timer').textContent = '';
+          clearTimer(s);
           logEvent('collected', id);
         }
       } else if (inactivator && s.status !== 'in-use' && s.status !== 'done') {
@@ -162,7 +170,7 @@
             const s = slots[id]; if(!s) return;
 
             if(seen[id] && status !== 'in-use'){
-              clearInterval(s.iv);
+              clearTimer(s);
               delete seen[id];
             }
 
@@ -173,7 +181,7 @@
             if(status==='in-use'){
               s.el.classList.add('in-use');
               s.end = end;
-              if(!seen[id]) startTimer(s);
+              if(!s.iv) startTimer(s);
             }
             else if(status==='done') {
               s.el.classList.add('done');
