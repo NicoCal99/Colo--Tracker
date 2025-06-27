@@ -109,6 +109,9 @@
         const params = new URLSearchParams({ action, room, server, slot, user });
         params.append('_', Date.now());
         fetch(`${LOG_URL}?${params}`, { cache:'no-cache' });
+      }
+        params.append('_', Date.now());
+        fetch(`${LOG_URL}?${params}`, { cache:'no-cache' });
         // record last action locally
         const key = `${room}-${server}-${slot}`;
         if (slots[key]) slots[key].lastAction = action;
@@ -166,7 +169,6 @@
         const now = Date.now();
         const next = Object.values(slots)
           .filter(s => s.state === 'in-use')
-          .filter(s => s.lastAction !== 'collected')
           .map(s => ({ id: s.id, rem: s.end - now }))
           .filter(o => o.rem > 0)
           .sort((a,b) => a.rem - b.rem)
