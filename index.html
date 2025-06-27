@@ -45,8 +45,11 @@
 
   <h2>Room 440</h2>
   <div id="grids-440" class="grids"></div>
-  <h2>Room 255</h2>
-  <div id="grids-255" class="grids"></div>
+
+  <h2>Room 255 - Full Grid</h2>
+  <div id="grids-255a" class="grids"></div>
+  <h2>Room 255 - Row of 6</h2>
+  <div id="grids-255b" class="grids"></div>
 
   <script>
   document.addEventListener('DOMContentLoaded', () => {
@@ -54,8 +57,6 @@
     const POLL_INTERVAL = 1000;
     const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
 
-    const rooms = ['440', '255'];
-    const rows  = ['A','B','C','D','E','F'];
     const slots = {};
     const collectedCache = new Set();
 
@@ -112,14 +113,34 @@
       }
     }
 
-    rooms.forEach(room => {
-      const container = document.getElementById(`grids-${room}`);
-      rows.forEach(row => {
+    function generateRoom440() {
+      const container = document.getElementById('grids-440');
+      for (let server = 1; server <= 6; server++) {
+        const prefix = `440S${server}`;
+        ['A','B','C','D','E','F'].forEach(row => {
+          for (let i = 1; i <= 6; i++) {
+            createSlot(`${prefix}-${row}${i}`, container);
+          }
+        });
+      }
+    }
+
+    function generateRoom255() {
+      const fullContainer = document.getElementById('grids-255a');
+      ['A','B','C','D','E','F'].forEach(row => {
         for (let i = 1; i <= 6; i++) {
-          createSlot(`${room}-${row}${i}`, container);
+          createSlot(`255A-${row}${i}`, fullContainer);
         }
       });
-    });
+
+      const rowContainer = document.getElementById('grids-255b');
+      for (let i = 1; i <= 6; i++) {
+        createSlot(`255B-A${i}`, rowContainer);
+      }
+    }
+
+    generateRoom440();
+    generateRoom255();
 
     function globalTick() {
       const now = Date.now();
