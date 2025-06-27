@@ -58,6 +58,7 @@
     const rows  = ['A','B','C','D','E','F'];
     const slots = {};
     const seen  = {};  // track timers started
+    const collectedCache = new Set();
     let uploader = '', collector = '', inactivator = '', activator = '';
 
     document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
@@ -69,8 +70,8 @@
     document.getElementById('markActive').onclick = () => { activator = document.getElementById('activatorInput').value.trim(); };
     document.getElementById('finishActivating').onclick = () => { activator = ''; };
 
-    function logEvent(action, id) {
-      const user = uploader || collector || inactivator || activator;
+    function logEvent(action, id, customUser = null) {
+      const user = customUser || uploader || collector || inactivator || activator;
       if (!action || !user) return;
       const [room, slot] = id.split('-');
       const params = new URLSearchParams({ action, room, slot, uploader: user });
@@ -83,19 +84,25 @@
       el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
       container.appendChild(el);
       el.onclick = () => handleClick(id);
-      slots[id] = { id, el, end: 0, iv: null };
+      slots[id] = { id, el, end: 0, iv: null, status: 'idle' };
     }
 
     function startTimer(s) {
       clearInterval(s.iv);
       seen[s.id] = true;
+      s.status = 'in-use';
+      s.el.classList.remove('done','inactive');
+      s.el.classList.add('in-use');
+
       function tick() {
         const rem = s.end - Date.now();
         if (rem <= 0) {
           clearInterval(s.iv);
-          s.el.classList.replace('in-use', 'done');
+          s.el.classList.remove('in-use');
+          s.el.classList.add('done');
           s.el.querySelector('.timer').textContent = '';
           delete seen[s.id];
+          s.status = 'done';
           logEvent('upload_done', s.id);
         } else {
           s.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
@@ -108,19 +115,27 @@
     function handleClick(id) {
       const s = slots[id];
       if (uploader) {
-        s.el.classList.remove('done','inactive');
-        s.el.classList.add('in-use');
         s.end = Date.now() + DURATION;
-        logEvent('upload_started', id);
+        s.status = 'in-use';
+        logEvent('upload_started', id, uploader);
         startTimer(s);
-      } else if (collector && s.el.classList.contains('done')) {
-        s.el.classList.remove('done');
-        logEvent('collected', id);
-      } else if (inactivator && !s.el.classList.contains('in-use') && !s.el.classList.contains('done')) {
+      } else if (collector && s.status === 'done') {
+        if (!collectedCache.has(id)) {
+          collectedCache.add(id);
+          s.status = 'collected';
+          s.el.classList.remove('done');
+          s.el.classList.remove('in-use');
+          s.el.classList.remove('inactive');
+          s.el.querySelector('.timer').textContent = '';
+          logEvent('collected', id);
+        }
+      } else if (inactivator && s.status !== 'in-use' && s.status !== 'done') {
         s.el.classList.add('inactive');
+        s.status = 'inactive';
         logEvent('inactivated', id);
-      } else if (activator && s.el.classList.contains('inactive')) {
+      } else if (activator && s.status === 'inactive') {
         s.el.classList.remove('inactive');
+        s.status = 'idle';
         logEvent('activated', id);
       }
     }
@@ -136,20 +151,26 @@
         .then(state=>{
           Object.entries(state).forEach(([id,{status,end}])=>{
             const s = slots[id]; if(!s) return;
-            if(status==='in-use'){
-              if(!seen[id]){
-                s.el.classList.remove('done','inactive');
-                s.el.classList.add('in-use');
-                s.end = end;
-                startTimer(s);
-              }
-            } else {
-              if(seen[id]){ clearInterval(s.iv); delete seen[id]; }
-              s.el.classList.remove('in-use');
-              s.el.querySelector('.timer').textContent='';
-              s.el.classList.toggle('done', status==='done');
-              s.el.classList.toggle('inactive', status==='inactive');
+
+            if(seen[id] && status !== 'in-use'){
+              clearInterval(s.iv);
+              delete seen[id];
             }
+
+            s.status = status;
+            s.el.classList.remove('in-use','done','inactive');
+            s.el.querySelector('.timer').textContent = '';
+
+            if(status==='in-use'){
+              s.el.classList.add('in-use');
+              s.end = end;
+              if(!seen[id]) startTimer(s);
+            }
+            else if(status==='done') {
+              s.el.classList.add('done');
+              collectedCache.delete(id);
+            }
+            else if(status==='inactive') s.el.classList.add('inactive');
           });
         }).catch(console.error);
     }
