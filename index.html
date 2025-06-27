@@ -50,11 +50,11 @@
   <h2>Room 255</h2>
   <div class="row-group">
     <div class="server-wrapper">
-      <h3>SERVER S7</h3>
+      <h3>SERVER S1</h3>
       <div id="grids-255a" class="grids"></div>
     </div>
     <div class="server-wrapper">
-      <h3>SERVER S8</h3>
+      <h3>SERVER S2</h3>
       <div id="grids-255b" class="grids"></div>
     </div>
   </div>
@@ -66,7 +66,7 @@
       const slots = {};
       let mode = null;
 
-      // Mode buttons
+      // Mode controls
       document.getElementById('beginLogging').addEventListener('click', () => {
         const uploader = document.getElementById('uploaderInput').value.trim();
         if (!uploader) { alert('Please enter an uploader name.'); return; }
@@ -88,98 +88,89 @@
         mode = null;
       });
 
-      // Logging events with cache-busting & all params
-      function logEvent(action, id) {
-        const [room, server, slot] = id.split('-');
+      // Log event: send room and slot separately
+      function logEvent(action, room, slot) {
         const user = mode === 'upload'
           ? document.getElementById('uploaderInput').value.trim()
           : document.getElementById('collectorInput').value.trim();
         if (!action || !user) return;
-        const params = new URLSearchParams({ action, room, server, slot, user });
-        params.append('_', Date.now());            // cache-buster
+        const params = new URLSearchParams({ action, room, slot, user });
+        params.append('_', Date.now()); // cache-buster
         fetch(`${LOG_URL}?${params}`, { cache: 'no-cache' })
           .catch(console.error);
       }
 
-      // Create slot elements
+      // Create slot element
       function createSlot(id, container) {
-        const el = document.createElement('div'); el.className = 'slot';
+        const el = document.createElement('div'); el.className='slot';
         el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
         container.appendChild(el);
-        slots[id] = { id, el, state: 'idle', end: 0 };
+        slots[id] = { id, el, state:'idle', end:0 };
         el.addEventListener('click', () => {
+          const [roomId, srv, slotId] = id.split('-');
+          const roomParam = `${roomId}-${srv}`;
           const s = slots[id];
-          if (mode === 'upload')   {
+          if (mode === 'upload') {
             s.state = 'in-use'; s.end = Date.now() + DURATION;
-            updateUI(s); logEvent('upload_started', id);
+            updateUI(s); logEvent('upload_started', roomParam, slotId);
           } else if (mode === 'collect' && s.state === 'done') {
-            s.state = 'idle'; updateUI(s); logEvent('collected', id);
+            s.state = 'idle'; updateUI(s); logEvent('collected', roomParam, slotId);
           }
         });
       }
 
-      // Update UI state
+      // Update UI
       function updateUI(s) {
-        s.el.classList.remove('in-use', 'done', 'inactive');
-        s.el.querySelector('.timer').textContent = '';
-        if (s.state === 'in-use')   s.el.classList.add('in-use');
-        if (s.state === 'done')     s.el.classList.add('done');
-        if (s.state === 'inactive') s.el.classList.add('inactive');
+        s.el.classList.remove('in-use','done','inactive');
+        s.el.querySelector('.timer').textContent='';
+        if (s.state==='in-use') s.el.classList.add('in-use');
+        if (s.state==='done')   s.el.classList.add('done');
+        if (s.state==='inactive') s.el.classList.add('inactive');
       }
 
       // Initialize grids
-      const rows = ['A','B','C','D','E','F'];
+      const rows=['A','B','C','D','E','F'];
       function initGrids() {
-        const row1 = document.getElementById('row1-440');
-        const row2 = document.getElementById('row2-440');
-        for (let srv=1; srv<=6; srv++) {
-          const wrap = document.createElement('div'); wrap.className='server-wrapper';
-          const lbl = document.createElement('h3'); lbl.textContent=`SERVER S${srv}`; wrap.appendChild(lbl);
-          const cont = document.createElement('div'); cont.className='grids'; wrap.appendChild(cont);
-          (srv<=3?row1:row2).appendChild(wrap);
-          rows.forEach(r=>{ for(let i=1;i<=6;i++){ createSlot(`440-S${srv}-${r}${i}`, cont); }});
+        const row1=document.getElementById('row1-440');
+        const row2=document.getElementById('row2-440');
+        for(let srv=1;srv<=6;srv++){
+          const wrapper=document.createElement('div'); wrapper.className='server-wrapper';
+          const lbl=document.createElement('h3'); lbl.textContent=`SERVER S${srv}`; wrapper.appendChild(lbl);
+          const grid=document.createElement('div'); grid.className='grids'; wrapper.appendChild(grid);
+          (srv<=3?row1:row2).appendChild(wrapper);
+          rows.forEach(r=>{for(let i=1;i<=6;i++){createSlot(`440-S${srv}-${r}${i}`,grid);}});
         }
-        const gridA = document.getElementById('grids-255a');
-        rows.forEach(r=>{ for(let i=1;i<=6;i++){ createSlot(`255-S7-${r}${i}`, gridA); }});
-        const gridB = document.getElementById('grids-255b');
-        for(let i=1;i<=6;i++){ createSlot(`255-S8-B${i}`, gridB); }
-      }
+        const g255a=document.getElementById('grids-255a');
+        rows.forEach(r=>{for(let i=1;i<=6;i++){createSlot(`255-S1-${r}${i}`,g255a);}});
+        const g255b=document.getElementById('grids-255b');
+        for(let i=1;i<=6;i++){createSlot(`255-S2-B${i}`,g255b);}      }
       initGrids();
 
-      // Refresh state (fallback old keys) every load
-      function refreshState() {
-        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache: 'no-cache' })
+      // Refresh state on load
+      function refreshState(){
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`,{cache:'no-cache'})
           .then(r=>r.json())
-          .then(state=>{
-            Object.values(slots).forEach(s => {
-              const full = state[s.id];
-              let val = full;
-              if (!val) {
-                const [r, srv, sl] = s.id.split('-');
-                val = state[`${r}-${sl}`];  // fallback
-              }
-              if (!val) return;
-              s.state = val.status;
-              s.end   = val.end;
-              updateUI(s);
+          .then(data=>{
+            Object.values(slots).forEach(s=>{
+              const [roomId,srv,slotId]=s.id.split('-');
+              const key=`${roomId}-${srv}-${slotId}`;
+              const entry=data[key]; if(!entry) return;
+              s.state=entry.status; s.end=entry.end; updateUI(s);
             });
-          })
-          .catch(console.error);
+          }).catch(console.error);
       }
       refreshState();
 
-      // Master timer
-      function masterTick() {
-        const now = Date.now();
-        Object.values(slots).forEach(s => {
-          if (s.state==='in-use') {
-            const rem = s.end-now;
-            if (rem<=0) { s.state='done'; updateUI(s); logEvent('upload_done', s.id); }
-            else { s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`; }
+      // Timer
+      setInterval(()=>{
+        const now=Date.now();
+        Object.values(slots).forEach(s=>{
+          if(s.state==='in-use'){
+            const rem=s.end-now;
+            if(rem<=0){s.state='done';updateUI(s);const [r,srv,slotId]=s.id.split('-');logEvent('upload_done',`${r}-${srv}`,slotId);} else {s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;}
           }
         });
-      }
-      setInterval(masterTick, 500);
+      },500);
     });
   </script>
 </body>
