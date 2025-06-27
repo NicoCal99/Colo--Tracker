@@ -41,6 +41,10 @@
       <button id="markActive">Mark Active</button>
       <button id="finishActivating">Finish Activating</button>
     </div>
+    <div>
+      <button id="logAll">Log All</button>
+      <button id="collectAll">Collect All</button>
+    </div>
   </div>
 
   <h2>Room 440</h2>
@@ -160,6 +164,31 @@
     }
 
     setInterval(globalTick, 500);
+
+    document.getElementById('logAll').onclick = () => {
+      const now = Date.now();
+      for (const s of Object.values(slots)) {
+        if (!s.active) {
+          s.end = now + DURATION;
+          s.active = true;
+          s.el.classList.remove('done', 'inactive');
+          s.el.classList.add('in-use');
+          logEvent('upload_started', s.id);
+        }
+      }
+    };
+
+    document.getElementById('collectAll').onclick = () => {
+      for (const s of Object.values(slots)) {
+        if (s.el.classList.contains('done') && !collectedCache.has(s.id)) {
+          collectedCache.add(s.id);
+          s.active = false;
+          s.el.classList.remove('done');
+          s.el.querySelector('.timer').textContent = '';
+          logEvent('collected', s.id);
+        }
+      }
+    };
 
     function refreshState() {
       fetch(`${LOG_URL}?mode=getState`)
