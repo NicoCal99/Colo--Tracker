@@ -93,6 +93,7 @@
         return val;
       }
 
+      // Mode toggles
       document.getElementById('beginLogging').onclick = () => {
         if (!requireName('uploaderInput','Uploader') || mode) {
           if (mode) alert(`Finish ${mode} first.`);
@@ -150,38 +151,37 @@
         container.appendChild(el);
         slots[id] = { id, el, state:'idle', end:0 };
         el.onclick = () => {
-          const [rid,srv,sli] = id.split('-');
-          const room = `${rid}-${srv}`;
-          let name = null;
-          if (mode==='upload')      name = requireName('uploaderInput','Uploader');
-          else if (mode==='collect')  name = requireName('collectorInput','Collector');
-          else if (mode==='activate') name = requireName('activatorInput','Activator');
-          else if (mode==='deactivate') name = requireName('deactivatorInput','Deactivator');
-          else return;
-          if (!name) return;
+          const [rid,srv,sli] = id.split('-'); const room = `${rid}-${srv}`;
+          let user;
+          switch(mode) {
+            case 'upload': user = requireName('uploaderInput','Uploader'); break;
+            case 'collect': user = requireName('collectorInput','Collector'); break;
+            case 'activate': user = requireName('activatorInput','Activator'); break;
+            case 'deactivate': user = requireName('deactivatorInput','Deactivator'); break;
+            default: return;
+          }
+          if (!user) return;
 
-          if (mode==='upload') {
+          if (mode === 'upload') {
             slots[id].state = 'in-use';
-            slots[id].end   = Date.now() + DURATION;
+            slots[id].end = Date.now() + DURATION;
             updateUI(slots[id]);
-            logEvent('upload_started', room, sli, name);
-          } else if (mode==='collect') {
-            if (slots[id].state === 'done') {
-              slots[id].state = 'idle';
-              slots[id].end   = 0;
-              updateUI(slots[id]);
-              logEvent('collected', room, sli, name);
-            }
-          } else if (mode==='activate') {
-            slots[id].state = 'idle';
-            slots[id].end   = 0;
+            logEvent('upload_started', room, sli, user);
+          }
+          if (mode === 'collect' && slots[id].state === 'done') {
+            slots[id].state = 'idle'; slots[id].end = 0;
             updateUI(slots[id]);
-            logEvent('activated', room, sli, name);
-          } else if (mode==='deactivate') {
-            slots[id].state = 'inactive';
-            slots[id].end   = 0;
+            logEvent('collected', room, sli, user);
+          }
+          if (mode === 'activate') {
+            slots[id].state = 'idle'; slots[id].end = 0;
             updateUI(slots[id]);
-            logEvent('inactivated', room, sli, name);
+            logEvent('activated', room, sli, user);
+          }
+          if (mode === 'deactivate') {
+            slots[id].state = 'inactive'; slots[id].end = 0;
+            updateUI(slots[id]);
+            logEvent('inactivated', room, sli, user);
           }
 
           updateCounts();
@@ -192,29 +192,28 @@
       function updateUI(s) {
         s.el.classList.remove('in-use','done','inactive');
         s.el.querySelector('.timer').textContent = '';
-        if (s.state === 'in-use')    s.el.classList.add('in-use');
-        if (s.state === 'done')      s.el.classList.add('done');
-        if (s.state === 'inactive')  s.el.classList.add('inactive');
+        if (s.state === 'in-use') s.el.classList.add('in-use');
+        if (s.state === 'done') s.el.classList.add('done');
+        if (s.state === 'inactive') s.el.classList.add('inactive');
       }
 
       function updateCounts() {
-        let g=0, c440=0, c255=0;
+        let total = 0, c440 = 0, c255 = 0;
         Object.values(slots).forEach(s => {
           if (s.state === 'done') {
-            g++;
-            const rid = s.id.split('-')[0];
-            if (rid === '440') c440++;
-            else if (rid === '255') c255++;
+            total++;
+            if (s.id.startsWith('440-')) c440++;
+            if (s.id.startsWith('255-')) c255++;
           }
         });
-        document.getElementById('global-count').textContent = `Total Ready: ${g}`;
-        document.getElementById('count-440').textContent   = `440 Ready: ${c440}`;
-        document.getElementById('count-255').textContent   = `255 Ready: ${c255}`;
+        document.getElementById('global-count').textContent = `Total Ready: ${total}`;
+        document.getElementById('count-440').textContent = `440 Ready: ${c440}`;
+        document.getElementById('count-255').textContent = `255 Ready: ${c255}`;
       }
 
       function updateNext() {
         const now = Date.now();
-        const arr = Object.values(slots)
+        const next = Object.values(slots)
           .filter(s => s.state === 'in-use')
           .map(s => ({ id: s.id, rem: s.end - now }))
           .filter(o => o.rem > 0)
@@ -222,7 +221,7 @@
           .slice(0,5);
         const container = document.getElementById('next-list');
         container.innerHTML = '<div><strong>Next Slots:</strong></div>';
-        arr.forEach(o => {
+        next.forEach(o => {
           const div = document.createElement('div');
           div.textContent = `${o.id} → ${Math.ceil(o.rem/1000)}s`;
           container.appendChild(div);
@@ -233,56 +232,47 @@
       function initGrids() {
         const r1 = document.getElementById('row1-440');
         const r2 = document.getElementById('row2-440');
-        for (let s=1; s<=6; s++) {
+        for (let s = 1; s <= 6; s++) {
           const wrap = document.createElement('div'); wrap.className = 'server-wrapper';
           const h3 = document.createElement('h3'); h3.textContent = `SERVER S${s}`;
           wrap.appendChild(h3);
-          const grid = document.createElement('div'); grid.className = 'grids';
-          wrap.appendChild(grid);
+          const grid = document.createElement('div'); grid.className = 'grids'; wrap.appendChild(grid);
           (s <= 3 ? r1 : r2).appendChild(wrap);
-          rows.forEach(r => {
-            for (let i=1; i<=6; i++) createSlot(`440-S${s}-${r}${i}`, grid);
-          });
+          rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`440-S${s}-${r}${i}`, grid); });
         }
-        const gA = document.getElementById('grids-255a');
-        rows.forEach(r => { for (let i=1; i<=6; i++) createSlot(`255-S1-${r}${i}`, gA); });
-        const gB = document.getElementById('grids-255b');
-        for (let i=1; i<=6; i++) createSlot(`255-S2-B${i}`, gB);
+        const gA = document.getElementById('grids-255a'); rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`255-S1-${r}${i}`, gA); });
+        const gB = document.getElementById('grids-255b'); for (let i = 1; i <= 6; i++) createSlot(`255-S2-B${i}`, gB);
       }
       initGrids();
 
       function refreshState() {
-        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, {cache:'no-cache'})
-          .then(r=>r.json()).then(data => {
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache:'no-cache' })
+          .then(r => r.json())
+          .then(data => {
             Object.values(slots).forEach(s => {
               const [rid,srv,sli] = s.id.split('-');
               const key = `${rid}-${srv}-${sli}`;
               const e = data[key];
               if (e && e.status) {
                 s.state = e.status;
-                s.end   = e.end;
+                s.end = e.end;
               } else {
-                s.state = 'idle';
-                s.end   = 0;
+                s.state = 'idle'; s.end = 0;
               }
               updateUI(s);
             });
-            updateCounts();
-            updateNext();
+            updateCounts(); updateNext();
           }).catch(console.error);
       }
       refreshState();
 
       setInterval(() => {
-        const now = Date.now();
-        let changed = false;
+        const now = Date.now(); let changed = false;
         Object.values(slots).forEach(s => {
           if (s.state === 'in-use') {
             const rem = s.end - now;
             if (rem <= 0) {
-              s.state = 'done';
-              s.end   = 0;
-              updateUI(s);
+              s.state = 'done'; s.end = 0; updateUI(s);
               const [rid,srv,sli] = s.id.split('-');
               logEvent('upload_done', `${rid}-${srv}`, sli, '');
               changed = true;
@@ -291,8 +281,7 @@
             }
           }
         });
-        if (changed) updateCounts();
-        updateNext();
+        if (changed) updateCounts(); updateNext();
       }, 500);
     });
   </script>
