@@ -250,6 +250,28 @@
           .then(r => r.json())
           .then(data => {
             Object.values(slots).forEach(s => {
+              const [rid, srv, sli] = s.id.split('-');
+              // key on room-slot to match Apps Script
+              const key = `${rid}-${sli}`;
+              const e = data[key];
+              if (e && e.status) {
+                s.state = e.status;
+                s.end   = e.end;
+              } else {
+                s.state = 'idle';
+                s.end   = 0;
+              }
+              updateUI(s);
+            });
+            updateCounts();
+            updateNext();
+          })
+          .catch(console.error);
+      }
+      refreshState();(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache:'no-cache' })
+          .then(r => r.json())
+          .then(data => {
+            Object.values(slots).forEach(s => {
               const [rid,srv,sli] = s.id.split('-');
               const key = `${rid}-${srv}-${sli}`;
               const e = data[key];
