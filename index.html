@@ -90,7 +90,7 @@
       el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
       container.appendChild(el);
       el.onclick = () => handleClick(id);
-      slots[id] = { id, el, end: 0, iv: null, status: 'idle' };
+      slots[id] = { id, el, end: 0, iv: null, lastTick: 0, status: 'idle' };
     }
 
     function clearTimer(s) {
@@ -108,7 +108,8 @@
       s.el.classList.add('in-use');
 
       function tick() {
-        const rem = s.end - Date.now();
+        const now = Date.now();
+        const rem = s.end - now;
         if (rem <= 0) {
           clearTimer(s);
           s.el.classList.remove('in-use');
@@ -118,11 +119,15 @@
           s.status = 'done';
           logEvent('upload_done', s.id);
         } else {
-          s.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
+          const secondsLeft = Math.ceil(rem / 1000);
+          if (s.lastTick !== secondsLeft) {
+            s.lastTick = secondsLeft;
+            s.el.querySelector('.timer').textContent = secondsLeft + 's';
+          }
         }
       }
       tick();
-      s.iv = setInterval(tick, 1000);
+      s.iv = setInterval(tick, 500);
     }
 
     function handleClick(id) {
@@ -169,25 +174,27 @@
             if (localOverrideUntil[id] && Date.now() < localOverrideUntil[id]) return;
             const s = slots[id]; if(!s) return;
 
-            if(seen[id] && status !== 'in-use'){
-              clearTimer(s);
-              delete seen[id];
-            }
+            if (status === 'in-use') {
+              if (!seen[id]) {
+                s.end = end;
+                startTimer(s);
+              }
+            } else {
+              if (seen[id]) {
+                clearTimer(s);
+                delete seen[id];
+              }
+              s.status = status;
+              s.el.classList.remove('in-use','done','inactive');
+              s.el.querySelector('.timer').textContent = '';
 
-            s.status = status;
-            s.el.classList.remove('in-use','done','inactive');
-            s.el.querySelector('.timer').textContent = '';
-
-            if(status==='in-use'){
-              s.el.classList.add('in-use');
-              s.end = end;
-              if(!s.iv) startTimer(s);
+              if (status === 'done') {
+                s.el.classList.add('done');
+                collectedCache.delete(id);
+              } else if (status === 'inactive') {
+                s.el.classList.add('inactive');
+              }
             }
-            else if(status==='done') {
-              s.el.classList.add('done');
-              collectedCache.delete(id);
-            }
-            else if(status==='inactive') s.el.classList.add('inactive');
           });
         }).catch(console.error);
     }
