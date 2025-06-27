@@ -20,11 +20,11 @@
       display: flex; flex-direction: column; justify-content: center; align-items: center;
       cursor: pointer; background-color: #e0ffe0; transition: background-color 0.2s;
       width: 60px; height: 180px; }
-    .slot.in-use    { background-color: lightcoral; }
-    .slot.done      { background-color: lightblue; }
-    .slot.inactive  { background-color: lightgray; }
-    .slot .content  { font-size: 14px; font-weight: bold; text-align: center; }
-    .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; font-weight: bold; }
+    .slot.in-use { background-color: lightcoral; }
+    .slot.done   { background-color: lightblue; }
+    .slot.inactive { background-color: lightgray; }
+    .slot .content { font-size: 14px; font-weight: bold; text-align: center; }
+    .slot .timer   { position: absolute; bottom: 4px; font-size: 12px; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -66,7 +66,7 @@
       const slots = {};
       let mode = null; // 'upload' or 'collect'
 
-            // Mode toggles with proper event listeners
+      // Mode toggles
       document.getElementById('beginLogging').addEventListener('click', () => {
         const uploader = document.getElementById('uploaderInput').value.trim();
         if (!uploader) { alert('Please enter an uploader name before beginning logging.'); return; }
@@ -75,14 +75,8 @@
       });
 
       document.getElementById('finishLogging').addEventListener('click', () => {
-        if (mode === 'collect') {
-          alert('Please finish collecting first.');
-          return;
-        }
-        if (mode !== 'upload') {
-          alert('Please begin logging first.');
-          return;
-        }
+        if (mode === 'collect') { alert('Please finish collecting first.'); return; }
+        if (mode !== 'upload') { alert('Please begin logging first.'); return; }
         mode = null;
       });
 
@@ -94,29 +88,24 @@
       });
 
       document.getElementById('finishCollecting').addEventListener('click', () => {
-        if (mode === 'upload') {
-          alert('Please finish logging first.');
-          return;
-        }
-        if (mode !== 'collect') {
-          alert('Please begin collecting first.');
-          return;
-        }
+        if (mode === 'upload') { alert('Please finish logging first.'); return; }
+        if (mode !== 'collect') { alert('Please begin collecting first.'); return; }
         mode = null;
       });
 
+      // Logging / Collecting events
       function logEvent(action, id) {
+        // id format: <room>-s<server>-<slot>, e.g. 440-s1-a1
+        const [room, server, slot] = id.split('-');
         const user = mode === 'upload'
           ? document.getElementById('uploaderInput').value.trim()
-          : mode === 'collect'
-            ? document.getElementById('collectorInput').value.trim()
-            : '';
+          : document.getElementById('collectorInput').value.trim();
         if (!action || !user) return;
-        const [room, slot] = id.split('-');
-        const params = new URLSearchParams({ action, room, slot, user });
+        const params = new URLSearchParams({ action, room, server, slot, user });
         fetch(`${LOG_URL}?${params}`).catch(console.error);
       }
 
+      // Create slot element
       function createSlot(id, container) {
         const el = document.createElement('div');
         el.className = 'slot';
@@ -125,8 +114,12 @@
         slots[id] = { id, el, state: 'idle', end: 0 };
         el.addEventListener('click', () => {
           const s = slots[id];
-          if (mode === 'upload') { s.state = 'in-use'; s.end = Date.now() + DURATION; updateUI(s); logEvent('upload_started', id); }
-          else if (mode === 'collect' && s.state === 'done') { s.state = 'idle'; updateUI(s); logEvent('collected', id); }
+          if (mode === 'upload') {
+            s.state = 'in-use'; s.end = Date.now() + DURATION;
+            updateUI(s); logEvent('upload_started', id);
+          } else if (mode === 'collect' && s.state === 'done') {
+            s.state = 'idle'; updateUI(s); logEvent('collected', id);
+          }
         });
       }
 
@@ -139,6 +132,7 @@
         else if (state === 'inactive') el.classList.add('inactive');
       }
 
+      // Initialize grids with new ID format
       const rows = ['A','B','C','D','E','F'];
       function initGrids() {
         const row1 = document.getElementById('row1-440');
@@ -146,17 +140,36 @@
         for (let srv = 1; srv <= 6; srv++) {
           const wrapper = document.createElement('div');
           wrapper.className = 'server-wrapper';
-          const lbl = document.createElement('h3'); lbl.textContent = `Server ${srv}`; wrapper.appendChild(lbl);
-          const container = document.createElement('div'); container.className = 'grids'; wrapper.appendChild(container);
+          const lbl = document.createElement('h3'); lbl.textContent = `Server ${srv}`;
+          wrapper.appendChild(lbl);
+          const container = document.createElement('div'); container.className = 'grids';
+          wrapper.appendChild(container);
           if (srv <= 3) row1.appendChild(wrapper); else row2.appendChild(wrapper);
-          rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`440S${srv}-${r}${i}`, container); });
+
+          rows.forEach(r => {
+            for (let i = 1; i <= 6; i++) {
+              const slotId = `440-s${srv}-${r.toLowerCase()}${i}`;
+              createSlot(slotId, container);
+            }
+          });
         }
-        const g255a = document.getElementById('grids-255a'); rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`255A-${r}${i}`, g255a); });
-        const g255b = document.getElementById('grids-255b'); for (let i = 1; i <= 6; i++) createSlot(`255B-A${i}`, g255b);
+
+        const g255a = document.getElementById('grids-255a');
+        rows.forEach(r => {
+          for (let i = 1; i <= 6; i++) {
+            const slotId = `255-${r.toLowerCase()}${i}`;
+            createSlot(slotId, g255a);
+          }
+        });
+        const g255b = document.getElementById('grids-255b');
+        for (let i = 1; i <= 6; i++) {
+          const slotId = `255-b${i}`;
+          createSlot(slotId, g255b);
+        }
       }
       initGrids();
 
-      // One-time state sync from server to retain existing in-use/done across reload
+      // Sync state on load
       function refreshState() {
         fetch(`${LOG_URL}?mode=getState`)
           .then(r => r.json())
@@ -164,35 +177,30 @@
             Object.entries(state).forEach(([id, { status, end }]) => {
               const s = slots[id];
               if (!s) return;
-              // Always apply server state on load
               s.state = status;
-              s.end = status === 'in-use' ? end : 0;
+              s.end = (status === 'in-use') ? end : 0;
               updateUI(s);
             });
           })
           .catch(console.error);
       }
       refreshState();
-          })
-          .catch(console.error);
-      }
-      refreshState();
 
+      // Timer loop
       function masterTick() {
         const now = Date.now();
         Object.values(slots).forEach(s => {
           if (s.state === 'in-use') {
             const remaining = s.end - now;
-            if (remaining <= 0) { s.state = 'done'; updateUI(s); logEvent('upload_done', s.id); }
-            else { s.el.querySelector('.timer').textContent = `${Math.ceil(remaining/1000)}s`; }
+            if (remaining <= 0) {
+              s.state = 'done'; updateUI(s); logEvent('upload_done', s.id);
+            } else {
+              s.el.querySelector('.timer').textContent = `${Math.ceil(remaining/1000)}s`;
+            }
           }
         });
       }
       setInterval(masterTick, 500);
-    });
-  </script>
-</body>
-</html>
     });
   </script>
 </body>
