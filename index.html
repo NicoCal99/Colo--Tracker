@@ -59,6 +59,8 @@
     const slots = {};
     const seen  = {};  // track timers started
     const collectedCache = new Set();
+    const localOverrideUntil = {};
+
     let uploader = '', collector = '', inactivator = '', activator = '';
 
     document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
@@ -74,8 +76,12 @@
       const user = customUser || uploader || collector || inactivator || activator;
       if (!action || !user) return;
       const [room, slot] = id.split('-');
-      const params = new URLSearchParams({ action, room, slot, uploader: user });
+      const params = new URLSearchParams({ action, room, slot, user });
       fetch(`${LOG_URL}?${params}`).catch(console.error);
+    }
+
+    function setOverride(id, duration = 3000) {
+      localOverrideUntil[id] = Date.now() + duration;
     }
 
     function createSlot(id, container) {
@@ -118,24 +124,26 @@
         s.end = Date.now() + DURATION;
         s.status = 'in-use';
         logEvent('upload_started', id, uploader);
+        setOverride(id);
         startTimer(s);
       } else if (collector && s.status === 'done') {
         if (!collectedCache.has(id)) {
           collectedCache.add(id);
           s.status = 'collected';
-          s.el.classList.remove('done');
-          s.el.classList.remove('in-use');
-          s.el.classList.remove('inactive');
+          setOverride(id);
+          s.el.classList.remove('done','in-use','inactive');
           s.el.querySelector('.timer').textContent = '';
           logEvent('collected', id);
         }
       } else if (inactivator && s.status !== 'in-use' && s.status !== 'done') {
         s.el.classList.add('inactive');
         s.status = 'inactive';
+        setOverride(id);
         logEvent('inactivated', id);
       } else if (activator && s.status === 'inactive') {
         s.el.classList.remove('inactive');
         s.status = 'idle';
+        setOverride(id);
         logEvent('activated', id);
       }
     }
@@ -150,6 +158,7 @@
         .then(r=>r.json())
         .then(state=>{
           Object.entries(state).forEach(([id,{status,end}])=>{
+            if (localOverrideUntil[id] && Date.now() < localOverrideUntil[id]) return;
             const s = slots[id]; if(!s) return;
 
             if(seen[id] && status !== 'in-use'){
