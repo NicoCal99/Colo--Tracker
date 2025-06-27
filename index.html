@@ -2,20 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Server Slot Tracker</title>
   <style>
     body { font-family: sans-serif; padding: 16px; }
     #controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
-    #controls div { display: flex; gap: 8px; }
+    #controls div { display: flex; gap: 8px; align-items: center; }
     #controls input { flex: 1; padding: 4px 8px; }
     #controls button { padding: 4px 8px; }
-    .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 80px; gap: 8px; margin-bottom: 24px; }
-    .slot { position: relative; border: 1px solid #ccc; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; background-color: #e0ffe0; transition: background-color 0.2s; }
+
+    .row-group { display: flex; gap: 32px; margin-bottom: 32px; }
+    .server-wrapper { display: flex; flex-direction: column; align-items: center; }
+    .server-wrapper h3 { margin: 0 0 8px; font-size: 16px; }
+
+    .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 180px; gap: 8px; }
+    .slot { position: relative; border: 1px solid #ccc; border-radius: 4px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      cursor: pointer; background-color: #e0ffe0; transition: background-color 0.2s;
+      width: 60px; height: 180px; }
     .slot.in-use    { background-color: lightcoral; }
     .slot.done      { background-color: lightblue; }
     .slot.inactive  { background-color: lightgray; }
-    .slot .content  { font-size: 14px; font-weight: bold; }
+    .slot .content  { font-size: 14px; font-weight: bold; text-align: center; }
     .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; font-weight: bold; }
   </style>
 </head>
@@ -31,158 +39,118 @@
       <button id="beginCollecting">Begin Collecting</button>
       <button id="finishCollecting">Finish Collecting</button>
     </div>
-    <div>
-      <button id="logAll">Log All</button>
-      <button id="collectAll">Collect All</button>
-    </div>
   </div>
 
   <h2>Room 440</h2>
-  <div id="grids-440" class="grids"></div>
+  <div id="wrapper-440">
+    <div class="row-group" id="row1-440"></div>
+    <div class="row-group" id="row2-440"></div>
+  </div>
 
-  <h2>Room 255 - Full Grid</h2>
-  <div id="grids-255a" class="grids"></div>
-
-  <h2>Room 255 - Row of 6</h2>
-  <div id="grids-255b" class="grids"></div>
+  <h2>Room 255</h2>
+  <div class="row-group">
+    <div class="server-wrapper">
+      <h3>Server 7</h3>
+      <div id="grids-255a" class="grids"></div>
+    </div>
+    <div class="server-wrapper">
+      <h3>Server 8</h3>
+      <div id="grids-255b" class="grids"></div>
+    </div>
+  </div>
 
   <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const DURATION = 30 * 1000;
-    const POLL_INTERVAL = 1000;
-    const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
+    document.addEventListener('DOMContentLoaded', () => {
+      const DURATION = 30 * 1000;
+      const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
+      const slots = {};
+      let mode = null; // 'upload' or 'collect'
 
-    // Central slot state
-    const slots = {};
-    let mode = null; // 'upload' | 'collect'
-
-    // Input mode handlers
-    document.getElementById('beginLogging').onclick = () => { mode = 'upload'; };
-    document.getElementById('finishLogging').onclick = () => { mode = null; };
-    document.getElementById('beginCollecting').onclick = () => { mode = 'collect'; };
-    document.getElementById('finishCollecting').onclick = () => { mode = null; };
-
-    function logEvent(action, id) {
-      const user = (mode === 'upload' ? document.getElementById('uploaderInput').value.trim() :
-                   mode === 'collect' ? document.getElementById('collectorInput').value.trim() :
-                   null);
-      if (!action || !user) return;
-      const [room, slot] = id.split('-');
-      new URLSearchParams({ action, room, slot, user });
-      fetch(`${LOG_URL}?action=${action}&room=${room}&slot=${slot}&user=${encodeURIComponent(user)}`)
-        .catch(console.error);
-    }
-
-    function createSlot(id, container) {
-      const el = document.createElement('div');
-      el.className = 'slot';
-      el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
-      container.appendChild(el);
-      slots[id] = { id, el, state: 'idle', end: 0 };
-      el.addEventListener('click', () => handleClick(id));
-    }
-
-    function handleClick(id) {
-      const s = slots[id];
-      if (mode === 'upload') {
-        s.end = Date.now() + DURATION;
-        s.state = 'in-use';
-        updateSlotUI(s);
-        logEvent('upload_started', id);
-      } else if (mode === 'collect' && s.state === 'done') {
-        s.state = 'idle';
-        s.end = 0;
-        updateSlotUI(s);
-        logEvent('collected', id);
-      }
-    }
-
-    function updateSlotUI(s) {
-      s.el.classList.remove('in-use', 'done', 'inactive');
-      s.el.querySelector('.timer').textContent = '';
-      if (s.state === 'in-use') s.el.classList.add('in-use');
-      else if (s.state === 'done') s.el.classList.add('done');
-      else if (s.state === 'inactive') s.el.classList.add('inactive');
-    }
-
-    // Generate grids
-    const rows = ['A','B','C','D','E','F'];
-    function generateGrids() {
-      const r440 = document.getElementById('grids-440');
-      for (let srv=1; srv<=6; srv++) rows.forEach(r => {
-        for (let i=1; i<=6; i++) createSlot(`440S${srv}-${r}${i}`, r440);
+      // Mode toggles with proper event listeners
+      document.getElementById('beginLogging').addEventListener('click', () => {
+        const uploader = document.getElementById('uploaderInput').value.trim();
+        if (!uploader) { alert('Please enter an uploader name before beginning logging.'); return; }
+        if (mode === 'collect') { alert('Finish collecting before starting logging.'); return; }
+        mode = 'upload';
       });
-      const r255a = document.getElementById('grids-255a');
-      rows.forEach(r => { for (let i=1; i<=6; i++) createSlot(`255A-${r}${i}`, r255a); });
-      const r255b = document.getElementById('grids-255b');
-      for (let i=1; i<=6; i++) createSlot(`255B-A${i}`, r255b);
-    }
-    generateGrids();
+      document.getElementById('finishLogging').addEventListener('click', () => {
+        if (mode !== 'upload') { alert('You are not in logging mode.'); return; }
+        mode = null;
+      });
+      document.getElementById('beginCollecting').addEventListener('click', () => {
+        const collector = document.getElementById('collectorInput').value.trim();
+        if (!collector) { alert('Please enter a collector name before beginning collecting.'); return; }
+        if (mode === 'upload') { alert('Finish logging before starting collecting.'); return; }
+        mode = 'collect';
+      });
+      document.getElementById('finishCollecting').addEventListener('click', () => {
+        if (mode !== 'collect') { alert('You are not in collecting mode.'); return; }
+        mode = null;
+      });
 
-    // Master timer loop
-    function masterTick() {
-      const now = Date.now();
-      for (const s of Object.values(slots)) {
-        if (s.state === 'in-use') {
-          const rem = s.end - now;
-          if (rem <= 0) {
-            s.state = 'done';
-            s.end = 0;
-            updateSlotUI(s);
-            logEvent('upload_done', s.id);
-          } else {
-            s.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
+      function logEvent(action, id) {
+        const user = mode === 'upload'
+          ? document.getElementById('uploaderInput').value.trim()
+          : mode === 'collect'
+            ? document.getElementById('collectorInput').value.trim()
+            : '';
+        if (!action || !user) return;
+        const [room, slot] = id.split('-');
+        const params = new URLSearchParams({ action, room, slot, user });
+        fetch(`${LOG_URL}?${params}`).catch(console.error);
+      }
+
+      function createSlot(id, container) {
+        const el = document.createElement('div');
+        el.className = 'slot';
+        el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
+        container.appendChild(el);
+        slots[id] = { id, el, state: 'idle', end: 0 };
+        el.addEventListener('click', () => {
+          const s = slots[id];
+          if (mode === 'upload') { s.state = 'in-use'; s.end = Date.now() + DURATION; updateUI(s); logEvent('upload_started', id); }
+          else if (mode === 'collect' && s.state === 'done') { s.state = 'idle'; updateUI(s); logEvent('collected', id); }
+        });
+      }
+
+      function updateUI(s) {
+        const { el, state } = s;
+        el.classList.remove('in-use', 'done', 'inactive');
+        el.querySelector('.timer').textContent = '';
+        if (state === 'in-use') el.classList.add('in-use');
+        else if (state === 'done') el.classList.add('done');
+        else if (state === 'inactive') el.classList.add('inactive');
+      }
+
+      const rows = ['A','B','C','D','E','F'];
+      function initGrids() {
+        const row1 = document.getElementById('row1-440');
+        const row2 = document.getElementById('row2-440');
+        for (let srv = 1; srv <= 6; srv++) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'server-wrapper';
+          const lbl = document.createElement('h3'); lbl.textContent = `Server ${srv}`; wrapper.appendChild(lbl);
+          const container = document.createElement('div'); container.className = 'grids'; wrapper.appendChild(container);
+          if (srv <= 3) row1.appendChild(wrapper); else row2.appendChild(wrapper);
+          rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`440S${srv}-${r}${i}`, container); });
+        }
+        const g255a = document.getElementById('grids-255a'); rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`255A-${r}${i}`, g255a); });
+        const g255b = document.getElementById('grids-255b'); for (let i = 1; i <= 6; i++) createSlot(`255B-A${i}`, g255b);
+      }
+      initGrids();
+
+      function masterTick() {
+        const now = Date.now();
+        Object.values(slots).forEach(s => {
+          if (s.state === 'in-use') {
+            const remaining = s.end - now;
+            if (remaining <= 0) { s.state = 'done'; updateUI(s); logEvent('upload_done', s.id); }
+            else { s.el.querySelector('.timer').textContent = `${Math.ceil(remaining/1000)}s`; }
           }
-        }
+        });
       }
-    }
-    setInterval(masterTick, 500);
-
-    // Collect All atomic snapshot
-    document.getElementById('collectAll').onclick = () => {
-      const doneSlots = Object.values(slots).filter(s => s.state === 'done');
-      doneSlots.forEach(s => {
-        s.state = 'idle';
-        s.end = 0;
-        updateSlotUI(s);
-        logEvent('collected', s.id);
-      });
-    };
-
-    // Log All
-    document.getElementById('logAll').onclick = () => {
-      const now = Date.now();
-      Object.values(slots).forEach(s => {
-        if (s.state === 'idle') {
-          s.state = 'in-use'; s.end = now + DURATION;
-          updateSlotUI(s);
-          logEvent('upload_started', s.id);
-        }
-      });
-    };
-
-    // Polling refresh, skip active/done
-    function refreshState() {
-      fetch(`${LOG_URL}?mode=getState`)
-        .then(r => r.json())
-        .then(state => {
-          const now = Date.now();
-          Object.entries(state).forEach(([id, {status, end}]) => {
-            const s = slots[id];
-            if (!s || s.state === 'in-use' || s.state === 'done') return;
-            if (status === 'in-use') {
-              s.state = 'in-use'; s.end = end;
-            } else if (status === 'done') {
-              s.state = 'done'; s.end = 0;
-            } else if (status === 'inactive') {
-              s.state = 'inactive'; s.end = 0;
-            }
-            updateSlotUI(s);
-          });
-        }).catch(console.error);
-    }
-    setInterval(refreshState, POLL_INTERVAL);
-  });
+      setInterval(masterTick, 500);
+    });
   </script>
 </body>
 </html>
