@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Server Slot Tracker</title>
   <style>
-    body { font-family: sans-serif; padding: 16px; position: relative; }
+    body { font-family: sans-serif; padding: 16px; }
     #controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 8px; }
     #controls div { display: flex; flex-direction: column; gap: 4px; }
     #controls input, #controls button { padding: 4px 8px; }
@@ -15,6 +15,7 @@
     #next-list { text-align: right; font-size: 13px; margin-bottom: 16px; }
     #next-list div { margin: 2px 0; }
 
+    h2 { margin-top: 24px; }
     .row-group { display: flex; gap: 32px; margin-bottom: 32px; }
     .server-wrapper { display: flex; flex-direction: column; align-items: center; }
     .server-wrapper h3 { margin: 0 0 8px; font-size: 16px; }
@@ -22,10 +23,10 @@
     .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 180px; gap: 8px; }
     .slot { position: relative; border: 1px solid #ccc; border-radius: 4px;
       display: flex; flex-direction: column; justify-content: center; align-items: center;
-      cursor: pointer; background-color: #e0ffe0; transition: background-color 0.2s;
+      cursor: pointer; background-color: #eee; transition: background-color 0.2s;
       width: 60px; height: 180px; }
     .slot.in-use    { background-color: lightcoral; }
-    .slot.done      { background-color: lightblue; }
+    .slot.done      { background-color: lightgreen; }
     .slot.inactive  { background-color: lightgray; }
     .slot .content  { font-size: 14px; font-weight: bold; text-align: center; }
     .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; font-weight: bold; }
@@ -58,9 +59,7 @@
     <div id="count-440">440 Ready: 0</div>
     <div id="count-255">255 Ready: 0</div>
   </div>
-  <div id="next-list">
-    <div><strong>Next Slots:</strong></div>
-  </div>
+  <div id="next-list"><div><strong>Next Slots:</strong></div></div>
 
   <h2>Room 440</h2>
   <div id="wrapper-440">
@@ -88,109 +87,83 @@
       let mode = null;
 
       function requireName(id, label) {
-        const val = document.getElementById(id).value.trim();
-        if (!val) alert(`Enter ${label} name.`);
-        return val;
+        const name = document.getElementById(id).value.trim();
+        if (!name) alert(`Enter ${label} name.`);
+        return name;
       }
 
       // Mode toggles
       document.getElementById('beginLogging').onclick = () => {
-        if (!requireName('uploaderInput','Uploader') || mode) {
-          if (mode) alert(`Finish ${mode} first.`);
-          return;
-        }
+        if (!requireName('uploaderInput','Uploader') || mode) return alert(mode ? `Finish ${mode} first.` : 'Enter uploader name.');
         mode = 'upload';
       };
       document.getElementById('finishLogging').onclick = () => {
-        if (mode !== 'upload') return alert('Not in logging mode.');
-        mode = null;
+        if (mode !== 'upload') return alert('Not in logging mode.'); mode = null;
       };
       document.getElementById('beginCollecting').onclick = () => {
-        if (!requireName('collectorInput','Collector') || mode) {
-          if (mode) alert(`Finish ${mode} first.`);
-          return;
-        }
+        if (!requireName('collectorInput','Collector') || mode) return alert(mode ? `Finish ${mode} first.` : 'Enter collector name.');
         mode = 'collect';
       };
       document.getElementById('finishCollecting').onclick = () => {
-        if (mode !== 'collect') return alert('Not in collecting mode.');
-        mode = null;
+        if (mode !== 'collect') return alert('Not in collecting mode.'); mode = null;
       };
       document.getElementById('beginActivating').onclick = () => {
-        if (!requireName('activatorInput','Activator') || mode) {
-          if (mode) alert(`Finish ${mode} first.`);
-          return;
-        }
+        if (!requireName('activatorInput','Activator') || mode) return alert(mode ? `Finish ${mode} first.` : 'Enter activator name.');
         mode = 'activate';
       };
       document.getElementById('finishActivating').onclick = () => {
-        if (mode !== 'activate') return alert('Not in activating mode.');
-        mode = null;
+        if (mode !== 'activate') return alert('Not in activating mode.'); mode = null;
       };
       document.getElementById('beginDeactivating').onclick = () => {
-        if (!requireName('deactivatorInput','Deactivator') || mode) {
-          if (mode) alert(`Finish ${mode} first.`);
-          return;
-        }
+        if (!requireName('deactivatorInput','Deactivator') || mode) return alert(mode ? `Finish ${mode} first.` : 'Enter deactivator name.');
         mode = 'deactivate';
       };
       document.getElementById('finishDeactivating').onclick = () => {
-        if (mode !== 'deactivate') return alert('Not in deactivating mode.');
-        mode = null;
+        if (mode !== 'deactivate') return alert('Not in deactivating mode.'); mode = null;
       };
 
       function logEvent(action, room, slot, user) {
         const params = new URLSearchParams({ action, room, slot, user });
         params.append('_', Date.now());
-        fetch(`${LOG_URL}?${params}`, {cache:'no-cache'}).catch(console.error);
+        fetch(`${LOG_URL}?${params}`, { cache: 'no-cache' });
       }
 
       function createSlot(id, container) {
-        const el = document.createElement('div'); el.className='slot';
+        const el = document.createElement('div'); el.className = 'slot';
         el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
         container.appendChild(el);
-        slots[id] = { id, el, state:'idle', end:0 };
+        slots[id] = { id, el, state: 'idle', end: 0 };
         el.onclick = () => {
-          const [rid,srv,sli] = id.split('-'); const room = `${rid}-${srv}`;
-          let user;
-          switch(mode) {
-            case 'upload': user = requireName('uploaderInput','Uploader'); break;
-            case 'collect': user = requireName('collectorInput','Collector'); break;
-            case 'activate': user = requireName('activatorInput','Activator'); break;
-            case 'deactivate': user = requireName('deactivatorInput','Deactivator'); break;
-            default: return;
-          }
-          if (!user) return;
+          const [room, srv, slotId] = id.split('-');
+          const roomKey = `${room}-${srv}`;
+          if (!mode) return;
+          const name = requireName({ upload: 'uploaderInput', collect: 'collectorInput', activate: 'activatorInput', deactivate: 'deactivatorInput' }[mode], mode.charAt(0).toUpperCase() + mode.slice(1));
+          if (!name) return;
 
           if (mode === 'upload') {
             slots[id].state = 'in-use';
             slots[id].end = Date.now() + DURATION;
-            updateUI(slots[id]);
-            logEvent('upload_started', room, sli, user);
+            logEvent('upload_started', roomKey, slotId, name);
           }
           if (mode === 'collect' && slots[id].state === 'done') {
             slots[id].state = 'idle'; slots[id].end = 0;
-            updateUI(slots[id]);
-            logEvent('collected', room, sli, user);
+            logEvent('collected', roomKey, slotId, name);
           }
           if (mode === 'activate') {
             slots[id].state = 'idle'; slots[id].end = 0;
-            updateUI(slots[id]);
-            logEvent('activated', room, sli, user);
+            logEvent('activated', roomKey, slotId, name);
           }
           if (mode === 'deactivate') {
             slots[id].state = 'inactive'; slots[id].end = 0;
-            updateUI(slots[id]);
-            logEvent('inactivated', room, sli, user);
+            logEvent('inactivated', roomKey, slotId, name);
           }
-
-          updateCounts();
-          updateNext();
+          updateUI(slots[id]);
+          updateCounts(); updateNext();
         };
       }
 
       function updateUI(s) {
-        s.el.classList.remove('in-use','done','inactive');
+        s.el.classList.remove('in-use', 'done', 'inactive');
         s.el.querySelector('.timer').textContent = '';
         if (s.state === 'in-use') s.el.classList.add('in-use');
         if (s.state === 'done') s.el.classList.add('done');
@@ -217,13 +190,13 @@
           .filter(s => s.state === 'in-use')
           .map(s => ({ id: s.id, rem: s.end - now }))
           .filter(o => o.rem > 0)
-          .sort((a,b) => a.rem - b.rem)
-          .slice(0,5);
+          .sort((a, b) => a.rem - b.rem)
+          .slice(0, 5);
         const container = document.getElementById('next-list');
         container.innerHTML = '<div><strong>Next Slots:</strong></div>';
         next.forEach(o => {
           const div = document.createElement('div');
-          div.textContent = `${o.id} → ${Math.ceil(o.rem/1000)}s`;
+          div.textContent = `${o.id} → ${Math.ceil(o.rem / 1000)}s`;
           container.appendChild(div);
         });
       }
@@ -246,38 +219,15 @@
       initGrids();
 
       function refreshState() {
-        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache:'no-cache' })
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache: 'no-cache' })
           .then(r => r.json())
           .then(data => {
             Object.values(slots).forEach(s => {
-              const [rid, srv, sli] = s.id.split('-');
-              // key on room-slot to match Apps Script
-              const key = `${rid}-${sli}`;
+              const parts = s.id.split('-');
+              const key = `${parts[0]}-${parts[1]}-${parts[2]}`;
               const e = data[key];
               if (e && e.status) {
-                s.state = e.status;
-                s.end   = e.end;
-              } else {
-                s.state = 'idle';
-                s.end   = 0;
-              }
-              updateUI(s);
-            });
-            updateCounts();
-            updateNext();
-          })
-          .catch(console.error);
-      }
-      refreshState();(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache:'no-cache' })
-          .then(r => r.json())
-          .then(data => {
-            Object.values(slots).forEach(s => {
-              const [rid,srv,sli] = s.id.split('-');
-              const key = `${rid}-${srv}-${sli}`;
-              const e = data[key];
-              if (e && e.status) {
-                s.state = e.status;
-                s.end = e.end;
+                s.state = e.status; s.end = e.end;
               } else {
                 s.state = 'idle'; s.end = 0;
               }
@@ -295,8 +245,8 @@
             const rem = s.end - now;
             if (rem <= 0) {
               s.state = 'done'; s.end = 0; updateUI(s);
-              const [rid,srv,sli] = s.id.split('-');
-              logEvent('upload_done', `${rid}-${srv}`, sli, '');
+              const parts = s.id.split('-');
+              logEvent('upload_done', `${parts[0]}-${parts[1]}`, parts[2], '');
               changed = true;
             } else {
               s.el.querySelector('.timer').textContent = `${Math.ceil(rem/1000)}s`;
