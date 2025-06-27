@@ -66,25 +66,42 @@
       const slots = {};
       let mode = null; // 'upload' or 'collect'
 
-      // Mode toggles with proper event listeners
+            // Mode toggles with proper event listeners
       document.getElementById('beginLogging').addEventListener('click', () => {
         const uploader = document.getElementById('uploaderInput').value.trim();
         if (!uploader) { alert('Please enter an uploader name before beginning logging.'); return; }
-        if (mode === 'collect') { alert('Finish collecting before starting logging.'); return; }
+        if (mode === 'collect') { alert('Please finish collecting before starting logging.'); return; }
         mode = 'upload';
       });
+
       document.getElementById('finishLogging').addEventListener('click', () => {
-        if (mode !== 'upload') { alert('You are not in logging mode.'); return; }
+        if (mode === 'collect') {
+          alert('Please finish collecting first.');
+          return;
+        }
+        if (mode !== 'upload') {
+          alert('Please begin logging first.');
+          return;
+        }
         mode = null;
       });
+
       document.getElementById('beginCollecting').addEventListener('click', () => {
         const collector = document.getElementById('collectorInput').value.trim();
         if (!collector) { alert('Please enter a collector name before beginning collecting.'); return; }
-        if (mode === 'upload') { alert('Finish logging before starting collecting.'); return; }
+        if (mode === 'upload') { alert('Please finish logging before starting collecting.'); return; }
         mode = 'collect';
       });
+
       document.getElementById('finishCollecting').addEventListener('click', () => {
-        if (mode !== 'collect') { alert('You are not in collecting mode.'); return; }
+        if (mode === 'upload') {
+          alert('Please finish logging first.');
+          return;
+        }
+        if (mode !== 'collect') {
+          alert('Please begin collecting first.');
+          return;
+        }
         mode = null;
       });
 
@@ -150,6 +167,10 @@
         });
       }
       setInterval(masterTick, 500);
+    });
+  </script>
+</body>
+</html>
     });
   </script>
 </body>
