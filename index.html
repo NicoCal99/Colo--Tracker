@@ -84,46 +84,23 @@
       el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
       container.appendChild(el);
       el.onclick = () => handleClick(id);
-      slots[id] = { id, el, end: 0, iv: null };
-    }
-
-    function clearTimer(s) {
-      if (s.iv) clearInterval(s.iv);
-      s.iv = null;
-    }
-
-    function startTimer(s) {
-      clearTimer(s);
-      s.el.classList.remove('done', 'inactive');
-      s.el.classList.add('in-use');
-      const update = () => {
-        const rem = s.end - Date.now();
-        if (rem <= 0) {
-          clearTimer(s);
-          s.el.classList.remove('in-use');
-          s.el.classList.add('done');
-          s.el.querySelector('.timer').textContent = '';
-          logEvent('upload_done', s.id);
-        } else {
-          s.el.querySelector('.timer').textContent = Math.ceil(rem / 1000) + 's';
-        }
-      };
-      update();
-      s.iv = setInterval(update, 1000);
+      slots[id] = { id, el, end: 0, active: false };
     }
 
     function handleClick(id) {
       const s = slots[id];
       if (uploader) {
         s.end = Date.now() + DURATION;
+        s.active = true;
+        s.el.classList.remove('done', 'inactive');
+        s.el.classList.add('in-use');
         logEvent('upload_started', id);
-        startTimer(s);
       } else if (collector && s.el.classList.contains('done')) {
         if (!collectedCache.has(id)) {
           collectedCache.add(id);
+          s.active = false;
           s.el.classList.remove('done');
           s.el.querySelector('.timer').textContent = '';
-          clearTimer(s);
           logEvent('collected', id);
         }
       } else if (inactivator && !s.el.classList.contains('in-use') && !s.el.classList.contains('done')) {
@@ -144,21 +121,40 @@
       });
     });
 
+    function globalTick() {
+      const now = Date.now();
+      for (const s of Object.values(slots)) {
+        if (!s.active || !s.end) continue;
+        const rem = s.end - now;
+        if (rem <= 0) {
+          s.active = false;
+          s.el.classList.remove('in-use');
+          s.el.classList.add('done');
+          s.el.querySelector('.timer').textContent = '';
+          logEvent('upload_done', s.id);
+        } else {
+          s.el.querySelector('.timer').textContent = Math.ceil(rem / 1000) + 's';
+        }
+      }
+    }
+
+    setInterval(globalTick, 500);
+
     function refreshState() {
       fetch(`${LOG_URL}?mode=getState`)
         .then(r => r.json())
         .then(state => {
           Object.entries(state).forEach(([id, { status, end }]) => {
             const s = slots[id];
-            if (!s) return;
-            if (s.iv) return; // Don't override if timer is running
+            if (!s || s.active) return;
 
             s.el.classList.remove('in-use', 'done', 'inactive');
             s.el.querySelector('.timer').textContent = '';
 
             if (status === 'in-use') {
               s.end = end;
-              startTimer(s);
+              s.active = true;
+              s.el.classList.add('in-use');
             } else if (status === 'done') {
               s.el.classList.add('done');
               collectedCache.delete(id);
