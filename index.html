@@ -161,17 +161,18 @@
         fetch(`${LOG_URL}?mode=getState`)
           .then(r => r.json())
           .then(state => {
-            const now = Date.now();
             Object.entries(state).forEach(([id, { status, end }]) => {
               const s = slots[id];
               if (!s) return;
-              // If local hasn't started or finished, apply server state
-              if (s.state === 'idle') {
-                s.state = status;
-                s.end = status === 'in-use' ? end : 0;
-                updateUI(s);
-              }
+              // Always apply server state on load
+              s.state = status;
+              s.end = status === 'in-use' ? end : 0;
+              updateUI(s);
             });
+          })
+          .catch(console.error);
+      }
+      refreshState();
           })
           .catch(console.error);
       }
