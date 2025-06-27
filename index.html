@@ -8,7 +8,7 @@
     body { font-family: sans-serif; padding: 16px; }
     #controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px; }
     #controls div { display: flex; gap: 8px; }
-    #controls input { flex:  1; padding: 4px 8px; }
+    #controls input { flex: 1; padding: 4px 8px; }
     #controls button { padding: 4px 8px; }
     .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 80px; gap: 8px; margin-bottom: 24px; }
     .slot { position: relative; border: 1px solid #ccc; border-radius: 4px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; background-color: #e0ffe0; transition: background-color 0.2s; }
@@ -32,16 +32,6 @@
       <button id="finishCollecting">Finish Collecting</button>
     </div>
     <div>
-      <input id="inactivatorInput" placeholder="Inactivator name…">
-      <button id="markInactive">Mark Inactive</button>
-      <button id="finishInactivating">Finish Inactivating</button>
-    </div>
-    <div>
-      <input id="activatorInput" placeholder="Activator name…">
-      <button id="markActive">Mark Active</button>
-      <button id="finishActivating">Finish Activating</button>
-    </div>
-    <div>
       <button id="logAll">Log All</button>
       <button id="collectAll">Collect All</button>
     </div>
@@ -52,6 +42,7 @@
 
   <h2>Room 255 - Full Grid</h2>
   <div id="grids-255a" class="grids"></div>
+
   <h2>Room 255 - Row of 6</h2>
   <div id="grids-255b" class="grids"></div>
 
@@ -61,26 +52,25 @@
     const POLL_INTERVAL = 1000;
     const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
 
+    // Central slot state
     const slots = {};
-    const collectedCache = new Set();
+    let mode = null; // 'upload' | 'collect'
 
-    let uploader = '', collector = '', inactivator = '', activator = '';
+    // Input mode handlers
+    document.getElementById('beginLogging').onclick = () => { mode = 'upload'; };
+    document.getElementById('finishLogging').onclick = () => { mode = null; };
+    document.getElementById('beginCollecting').onclick = () => { mode = 'collect'; };
+    document.getElementById('finishCollecting').onclick = () => { mode = null; };
 
-    document.getElementById('beginLogging').onclick = () => { uploader = document.getElementById('uploaderInput').value.trim(); };
-    document.getElementById('finishLogging').onclick = () => { uploader = ''; };
-    document.getElementById('beginCollecting').onclick = () => { collector = document.getElementById('collectorInput').value.trim(); };
-    document.getElementById('finishCollecting').onclick = () => { collector = ''; };
-    document.getElementById('markInactive').onclick = () => { inactivator = document.getElementById('inactivatorInput').value.trim(); };
-    document.getElementById('finishInactivating').onclick = () => { inactivator = ''; };
-    document.getElementById('markActive').onclick = () => { activator = document.getElementById('activatorInput').value.trim(); };
-    document.getElementById('finishActivating').onclick = () => { activator = ''; };
-
-    function logEvent(action, id, customUser = null) {
-      const user = customUser || uploader || collector || inactivator || activator;
+    function logEvent(action, id) {
+      const user = (mode === 'upload' ? document.getElementById('uploaderInput').value.trim() :
+                   mode === 'collect' ? document.getElementById('collectorInput').value.trim() :
+                   null);
       if (!action || !user) return;
       const [room, slot] = id.split('-');
-      const params = new URLSearchParams({ action, room, slot, user });
-      fetch(`${LOG_URL}?${params}`).catch(console.error);
+      new URLSearchParams({ action, room, slot, user });
+      fetch(`${LOG_URL}?action=${action}&room=${room}&slot=${slot}&user=${encodeURIComponent(user)}`)
+        .catch(console.error);
     }
 
     function createSlot(id, container) {
@@ -88,135 +78,109 @@
       el.className = 'slot';
       el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
       container.appendChild(el);
-      el.onclick = () => handleClick(id);
-      slots[id] = { id, el, end: 0, active: false };
+      slots[id] = { id, el, state: 'idle', end: 0 };
+      el.addEventListener('click', () => handleClick(id));
     }
 
     function handleClick(id) {
       const s = slots[id];
-      if (uploader) {
+      if (mode === 'upload') {
         s.end = Date.now() + DURATION;
-        s.active = true;
-        s.el.classList.remove('done', 'inactive');
-        s.el.classList.add('in-use');
+        s.state = 'in-use';
+        updateSlotUI(s);
         logEvent('upload_started', id);
-      } else if (collector && s.el.classList.contains('done')) {
-        if (!collectedCache.has(id)) {
-          collectedCache.add(id);
-          s.active = false;
-          s.el.classList.remove('done');
-          s.el.querySelector('.timer').textContent = '';
-          logEvent('collected', id);
-        }
-      } else if (inactivator && !s.el.classList.contains('in-use') && !s.el.classList.contains('done')) {
-        s.el.classList.add('inactive');
-        logEvent('inactivated', id);
-      } else if (activator && s.el.classList.contains('inactive')) {
-        s.el.classList.remove('inactive');
-        logEvent('activated', id);
+      } else if (mode === 'collect' && s.state === 'done') {
+        s.state = 'idle';
+        s.end = 0;
+        updateSlotUI(s);
+        logEvent('collected', id);
       }
     }
 
-    function generateRoom440() {
-      const container = document.getElementById('grids-440');
-      for (let server = 1; server <= 6; server++) {
-        const prefix = `440S${server}`;
-        ['A','B','C','D','E','F'].forEach(row => {
-          for (let i = 1; i <= 6; i++) {
-            createSlot(`${prefix}-${row}${i}`, container);
-          }
-        });
-      }
+    function updateSlotUI(s) {
+      s.el.classList.remove('in-use', 'done', 'inactive');
+      s.el.querySelector('.timer').textContent = '';
+      if (s.state === 'in-use') s.el.classList.add('in-use');
+      else if (s.state === 'done') s.el.classList.add('done');
+      else if (s.state === 'inactive') s.el.classList.add('inactive');
     }
 
-    function generateRoom255() {
-      const fullContainer = document.getElementById('grids-255a');
-      ['A','B','C','D','E','F'].forEach(row => {
-        for (let i = 1; i <= 6; i++) {
-          createSlot(`255A-${row}${i}`, fullContainer);
-        }
+    // Generate grids
+    const rows = ['A','B','C','D','E','F'];
+    function generateGrids() {
+      const r440 = document.getElementById('grids-440');
+      for (let srv=1; srv<=6; srv++) rows.forEach(r => {
+        for (let i=1; i<=6; i++) createSlot(`440S${srv}-${r}${i}`, r440);
       });
-
-      const rowContainer = document.getElementById('grids-255b');
-      for (let i = 1; i <= 6; i++) {
-        createSlot(`255B-A${i}`, rowContainer);
-      }
+      const r255a = document.getElementById('grids-255a');
+      rows.forEach(r => { for (let i=1; i<=6; i++) createSlot(`255A-${r}${i}`, r255a); });
+      const r255b = document.getElementById('grids-255b');
+      for (let i=1; i<=6; i++) createSlot(`255B-A${i}`, r255b);
     }
+    generateGrids();
 
-    generateRoom440();
-    generateRoom255();
-
-    function globalTick() {
+    // Master timer loop
+    function masterTick() {
       const now = Date.now();
       for (const s of Object.values(slots)) {
-        if (!s.active || !s.end) continue;
-        const rem = s.end - now;
-        if (rem <= 0) {
-          s.active = false;
-          s.el.classList.remove('in-use');
-          s.el.classList.add('done');
-          s.el.querySelector('.timer').textContent = '';
-          logEvent('upload_done', s.id);
-        } else {
-          s.el.querySelector('.timer').textContent = Math.ceil(rem / 1000) + 's';
+        if (s.state === 'in-use') {
+          const rem = s.end - now;
+          if (rem <= 0) {
+            s.state = 'done';
+            s.end = 0;
+            updateSlotUI(s);
+            logEvent('upload_done', s.id);
+          } else {
+            s.el.querySelector('.timer').textContent = Math.ceil(rem/1000) + 's';
+          }
         }
       }
     }
+    setInterval(masterTick, 500);
 
-    setInterval(globalTick, 500);
+    // Collect All atomic snapshot
+    document.getElementById('collectAll').onclick = () => {
+      const doneSlots = Object.values(slots).filter(s => s.state === 'done');
+      doneSlots.forEach(s => {
+        s.state = 'idle';
+        s.end = 0;
+        updateSlotUI(s);
+        logEvent('collected', s.id);
+      });
+    };
 
+    // Log All
     document.getElementById('logAll').onclick = () => {
       const now = Date.now();
-      for (const s of Object.values(slots)) {
-        if (!s.active) {
-          s.end = now + DURATION;
-          s.active = true;
-          s.el.classList.remove('done', 'inactive');
-          s.el.classList.add('in-use');
+      Object.values(slots).forEach(s => {
+        if (s.state === 'idle') {
+          s.state = 'in-use'; s.end = now + DURATION;
+          updateSlotUI(s);
           logEvent('upload_started', s.id);
         }
-      }
+      });
     };
 
-    document.getElementById('collectAll').onclick = () => {
-      for (const s of Object.values(slots)) {
-        if (s.el.classList.contains('done') && !collectedCache.has(s.id)) {
-          collectedCache.add(s.id);
-          s.active = false;
-          s.el.classList.remove('done');
-          s.el.querySelector('.timer').textContent = '';
-          logEvent('collected', s.id);
-        }
-      }
-    };
-
+    // Polling refresh, skip active/done
     function refreshState() {
       fetch(`${LOG_URL}?mode=getState`)
         .then(r => r.json())
         .then(state => {
-          Object.entries(state).forEach(([id, { status, end }]) => {
+          const now = Date.now();
+          Object.entries(state).forEach(([id, {status, end}]) => {
             const s = slots[id];
-            if (!s || s.active) return;
-
-            s.el.classList.remove('in-use', 'done', 'inactive');
-            s.el.querySelector('.timer').textContent = '';
-
+            if (!s || s.state === 'in-use' || s.state === 'done') return;
             if (status === 'in-use') {
-              s.end = end;
-              s.active = true;
-              s.el.classList.add('in-use');
+              s.state = 'in-use'; s.end = end;
             } else if (status === 'done') {
-              s.el.classList.add('done');
-              collectedCache.delete(id);
+              s.state = 'done'; s.end = 0;
             } else if (status === 'inactive') {
-              s.el.classList.add('inactive');
+              s.state = 'inactive'; s.end = 0;
             }
+            updateSlotUI(s);
           });
-        })
-        .catch(console.error);
+        }).catch(console.error);
     }
-
-    refreshState();
     setInterval(refreshState, POLL_INTERVAL);
   });
   </script>
