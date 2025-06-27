@@ -202,21 +202,27 @@
       refreshState();
 
       setInterval(()=>{
-        const now=Date.now(),ch=false;
-        Object.values(slots).forEach(s=>{
-          if(s.state==='in-use'){
-            const rem=s.end-now;
-            if(rem<=0){
-              s.state='done';s.end=0;updateUI(s);
-              const [room,server,slotId]=s.id.split('-');
-              logEvent('upload_done',room,server,slotId,'');
-              ch=true;
-            } else s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;
+        const now = Date.now();
+        let changed = false;
+        Object.values(slots).forEach(s => {
+          if (s.state === 'in-use') {
+            const rem = s.end - now;
+            if (rem <= 0) {
+              s.state = 'done';
+              s.end = 0;
+              updateUI(s);
+              const [room, server, slotId] = s.id.split('-');
+              logEvent('upload_done', room, server, slotId, '');
+              changed = true;
+            } else {
+              s.el.querySelector('.timer').textContent = `${Math.ceil(rem/1000)}s`;
+            }
           }
         });
-        if(ch)updateCounts(),updateNext();
-      },500);
+        if (changed) updateCounts(), updateNext();
+      }, 500);
     });
   </script>
 </body>
 </html>
+
