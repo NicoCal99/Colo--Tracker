@@ -265,6 +265,8 @@
           .catch(console.error);
       }
       refreshState();
+      // periodically sync state from server every 5 seconds
+      setInterval(refreshState, 5000);
 
       // Timer tick
       setInterval(() => {
@@ -287,8 +289,9 @@
         });
         if (changed) {
           updateCounts();
-          updateNext();
         }
+        // always update next slots live
+        updateNext();
       }, 500);
     });
   </script>
