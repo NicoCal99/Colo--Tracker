@@ -156,6 +156,27 @@
       }
       initGrids();
 
+      // One-time state sync from server to retain existing in-use/done across reload
+      function refreshState() {
+        fetch(`${LOG_URL}?mode=getState`)
+          .then(r => r.json())
+          .then(state => {
+            const now = Date.now();
+            Object.entries(state).forEach(([id, { status, end }]) => {
+              const s = slots[id];
+              if (!s) return;
+              // If local hasn't started or finished, apply server state
+              if (s.state === 'idle') {
+                s.state = status;
+                s.end = status === 'in-use' ? end : 0;
+                updateUI(s);
+              }
+            });
+          })
+          .catch(console.error);
+      }
+      refreshState();
+
       function masterTick() {
         const now = Date.now();
         Object.values(slots).forEach(s => {
