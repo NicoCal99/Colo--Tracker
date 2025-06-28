@@ -6,17 +6,20 @@
   <title>Server Slot Tracker</title>
   <style>
     body { font-family: sans-serif; padding: 16px; }
-    #controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 8px; }
+    #controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
     #controls div { display: flex; flex-direction: column; gap: 4px; }
     #controls input, #controls button { padding: 4px 8px; }
-    #summary { text-align: right; margin-bottom: 8px; font-size: 14px; }
+
+    #summary { text-align: right; margin-bottom: 16px; font-size: 14px; }
     #summary div { margin: 2px 0; }
-    #next-list { text-align: right; font-size: 13px; margin-bottom: 16px; }
+    #next-list { text-align: right; font-size: 13px; margin-bottom: 24px; }
     #next-list div { margin: 2px 0; }
+
     h2 { margin-top: 24px; }
     .row-group { display: flex; gap: 32px; margin-bottom: 32px; }
     .server-wrapper { display: flex; flex-direction: column; align-items: center; }
     .server-wrapper h3 { margin: 0 0 8px; font-size: 16px; }
+
     .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 180px; gap: 8px; }
     .slot { position: relative; border: 1px solid #ccc; border-radius: 4px;
       display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -77,182 +80,161 @@
   </div>
 
   <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const DURATION = 30 * 1000;
-    const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
-    const slots = {};
-    let mode = null;
+    document.addEventListener('DOMContentLoaded', () => {
+      const DURATION = 30 * 1000;
+      const LOG_URL = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
+      const slots = {};
+      let mode = null;
 
-    function requireName(id, label) {
-      const val = document.getElementById(id).value.trim();
-      if (!val) alert(`Enter ${label} name.`);
-      return val;
-    }
+      const controls = [
+        { start: 'beginLogging', finish: 'finishLogging', input: 'uploaderInput', label: 'Uploader', mode: 'upload' },
+        { start: 'beginCollecting', finish: 'finishCollecting', input: 'collectorInput', label: 'Collector', mode: 'collect' },
+        { start: 'beginActivating', finish: 'finishActivating', input: 'activatorInput', label: 'Activator', mode: 'activate' },
+        { start: 'beginDeactivating', finish: 'finishDecrypting', input: 'deactivatorInput', label: 'Deactivator', mode: 'deactivate' },
+      ];
 
-    // Mode toggles
-    document.getElementById('beginLogging').addEventListener('click', () => {
-      if (!requireName('uploaderInput','Uploader') || mode) return;
-      mode = 'upload';
-    });
-    document.getElementById('finishLogging').addEventListener('click', () => {
-      if (mode !== 'upload') return;
-      mode = null;
-    });
-    document.getElementById('beginCollecting').addEventListener('click', () => {
-      if (!requireName('collectorInput','Collector') || mode) return;
-      mode = 'collect';
-    });
-    document.getElementById('finishCollecting').addEventListener('click', () => {
-      if (mode !== 'collect') return;
-      mode = null;
-    });
-    document.getElementById('beginActivating').addEventListener('click', () => {
-      if (!requireName('activatorInput','Activator') || mode) return;
-      mode = 'activate';
-    });
-    document.getElementById('finishActivating').addEventListener('click', () => {
-      if (mode !== 'activate') return;
-      mode = null;
-    });
-    document.getElementById('beginDeactivating').addEventListener('click', () => {
-      if (!requireName('deactivatorInput','Deactivator') || mode) return;
-      mode = 'deactivate';
-    });
-    document.getElementById('finishDeactivating').addEventListener('click', () => {
-      if (mode !== 'deactivate') return;
-      mode = null;
-    });
-
-    function logEvent(action, room, server, slot, user) {
-      const params = new URLSearchParams({ action, room, server, slot, user });
-      params.append('_',Date.now());
-      fetch(`${LOG_URL}?${params}`, { cache:'no-cache' });
-    }
-
-    function createSlot(id, container) {
-      const el = document.createElement('div');
-      el.className = 'slot';
-      el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
-      container.appendChild(el);
-      slots[id] = { id, el, state:'idle', end:0 };
-
-      el.addEventListener('click', () => {
-        if (!mode) return;
-        const [room, server, slotId] = id.split('-');
-        const inputMap = { upload:'uploaderInput', collect:'collectorInput', activate:'activatorInput', deactivate:'deactivatorInput' };
-        const name = requireName(inputMap[mode], mode);
-        if (!name) return;
-
-        if (mode === 'upload') {
-          slots[id].state='in-use';
-          slots[id].end = Date.now()+DURATION;
-          logEvent('upload_started',room,server,slotId,name);
-        }
-        if (mode === 'collect' && slots[id].state==='done') {
-          slots[id].state='idle';
-          slots[id].end=0;
-          logEvent('collected',room,server,slotId,name);
-        }
-        if (mode === 'activate') {
-          slots[id].state='idle';
-          slots[id].end=0;
-          logEvent('activated',room,server,slotId,name);
-        }
-        if (mode === 'deactivate') {
-          slots[id].state='inactive';
-          slots[id].end=0;
-          logEvent('inactivated',room,server,slotId,name);
-        }
-        updateUI(slots[id]); updateCounts(); updateNext();
-      });
-    }
-
-    function updateUI(s) {
-      s.el.classList.remove('in-use','done','inactive');
-      s.el.querySelector('.timer').textContent='';
-      if (s.state==='in-use') s.el.classList.add('in-use');
-      if (s.state==='done')   s.el.classList.add('done');
-      if (s.state==='inactive') s.el.classList.add('inactive');
-    }
-
-    function updateCounts() {
-      let total=0,c440=0,c255=0;
-      Object.values(slots).forEach(s=>{
-        if (s.state==='done') {
-          total++; if (s.id.startsWith('440-')) c440++; if (s.id.startsWith('255-')) c255++;
-        }
-      });
-      document.getElementById('global-count').textContent=`Total Ready: ${total}`;
-      document.getElementById('count-440').textContent=`440 Ready: ${c440}`;
-      document.getElementById('count-255').textContent=`255 Ready: ${c255}`;
-    }
-
-    function updateNext() {
-      const now=Date.now();
-      const next=Object.values(slots)
-        .filter(s=>s.state==='in-use')
-        .map(s=>({id:s.id,rem:s.end-now}))
-        .filter(o=>o.rem>0)
-        .sort((a,b)=>a.rem-b.rem)
-        .slice(0,5);
-      const container=document.getElementById('next-list');
-      container.innerHTML='<div><strong>Next Slots:</strong></div>';
-      next.forEach(o=>{
-        const d=document.createElement('div');
-        d.textContent=`${o.id} → ${Math.ceil(o.rem/1000)}s`;
-        container.appendChild(d);
-      });
-    }
-
-    const rows=['A','B','C','D','E','F'];
-    function initGrids() {
-      const r1=document.getElementById('row1-440'), r2=document.getElementById('row2-440');
-      for(let s=1;s<=6;s++){
-        const wrap=document.createElement('div'); wrap.className='server-wrapper';
-        const h3=document.createElement('h3'); h3.textContent=`SERVER S${s}`; wrap.appendChild(h3);
-        const grid=document.createElement('div'); grid.className='grids'; wrap.appendChild(grid);
-        (s<=3?r1:r2).appendChild(wrap);
-        rows.forEach(r=>{for(let i=1;i<=6;i++) createSlot(`440-S${s}-${r}${i}`,grid);});
+      function requireName(id, label) {
+        const val = document.getElementById(id).value.trim();
+        if (!val) alert(`Enter ${label} name.`);
+        return val;
       }
-      const ga=document.getElementById('grids-255a'); rows.forEach(r=>{for(let i=1;i<=6;i++) createSlot(`255-S1-${r}${i}`,ga);});
-      const gb=document.getElementById('grids-255b'); for(let i=1;i<=6;i++) createSlot(`255-S2-B${i}`,gb);
-    }
-    initGrids();
 
-    function refreshState() {
-      fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`,{cache:'no-cache'})
-        .then(r=>r.json())
-        .then(data=>{
-          Object.values(slots).forEach(s=>{
-            const [room,server,slotId]=s.id.split('-');
-            const key=`${room}-${server}-${slotId}`;
-            if (data.hasOwnProperty(key)) {
-              s.state = data[key].status;
-              s.end   = data[key].end || 0;
-              updateUI(s);
-            }
-          });
-          updateCounts(); updateNext();
-        }).catch(console.error);
-    }
-    refreshState(); setInterval(refreshState,5000);
+      function setupControl(startId, finishId, inputId, label, m) {
+        document.getElementById(startId).addEventListener('click', () => {
+          if (!requireName(inputId, label) || mode) return;
+          mode = m;
+        });
+        document.getElementById(finishId).addEventListener('click', () => {
+          if (mode !== m) return;
+          mode = null;
+        });
+      }
 
-    setInterval(()=>{
-      const now=Date.now(); let changed=false;
-      Object.values(slots).forEach(s=>{
-        if(s.state==='in-use'){
-          const rem=s.end-now;
-          if(rem<=0){ s.state='done'; s.end=0; updateUI(s);
-            const [room,server,slotId]=s.id.split('-');
-            logEvent('upload_done',room,server,slotId,''); changed=true;
-          } else {
-            s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;
+      setupControl('beginLogging','finishLogging','uploaderInput','Uploader','upload');
+      setupControl('beginCollecting','finishCollecting','collectorInput','Collector','collect');
+      setupControl('beginActivating','finishActivating','activatorInput','Activator','activate');
+      setupControl('beginDeactivating','finishDeactivating','deactivatorInput','Deactivator','deactivate');
+
+      function logEvent(action, room, server, slot, user) {
+        const params = new URLSearchParams({ action, room, server, slot, user });
+        params.append('_', Date.now());
+        fetch(`${LOG_URL}?${params}`, { cache: 'no-cache' });
+      }
+
+      function createSlot(id, container) {
+        const el = document.createElement('div');
+        el.className = 'slot';
+        el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
+        container.appendChild(el);
+        slots[id] = { id, el, state: 'idle', end: 0 };
+
+        el.addEventListener('click', () => {
+          if (!mode) return;
+          const [room, server, slotId] = id.split('-');
+          const name = requireName(
+            document.getElementById({ upload:'uploaderInput', collect:'collectorInput', activate:'activatorInput', deactivate:'deactivatorInput' }[mode]).id,
+            mode.charAt(0).toUpperCase() + mode.slice(1)
+          );
+          if (!name) return;
+
+          if (mode === 'upload') {
+            slots[id].state = 'in-use';
+            slots[id].end = Date.now() + DURATION;
+            logEvent('upload_started', room, server, slotId, name);
+          } else if (mode === 'collect' && slots[id].state === 'done') {
+            slots[id].state = 'idle'; slots[id].end = 0;
+            logEvent('collected', room, server, slotId, name);
+          } else if (mode === 'activate') {
+            slots[id].state = 'idle'; slots[id].end = 0;
+            logEvent('activated', room, server, slotId, name);
+          } else if (mode === 'deactivate') {
+            slots[id].state = 'inactive'; slots[id].end = 0;
+            logEvent('inactivated', room, server, slotId, name);
           }
+
+          updateUI(slots[id]); updateCounts(); updateNext();
+        });
+      }
+
+      function updateUI(s) {
+        s.el.classList.remove('in-use','done','inactive');
+        s.el.querySelector('.timer').textContent = '';
+        if (s.state === 'in-use') s.el.classList.add('in-use');
+        if (s.state === 'done') s.el.classList.add('done');
+        if (s.state === 'inactive') s.el.classList.add('inactive');
+      }
+
+      function updateCounts() {
+        let total = 0, c440 = 0, c255 = 0;
+        Object.values(slots).forEach(s => {
+          if (s.state === 'done') {
+            total++; if (s.id.startsWith('440-')) c440++; if (s.id.startsWith('255-')) c255++;
+          }
+        });
+        document.getElementById('global-count').textContent = `Total Ready: ${total}`;
+        document.getElementById('count-440').textContent = `440 Ready: ${c440}`;
+        document.getElementById('count-255').textContent = `255 Ready: ${c255}`;
+      }
+
+      function updateNext() {
+        const now = Date.now();
+        const next = Object.values(slots)
+          .filter(s => s.state === 'in-use')
+          .map(s => ({ id: s.id, rem: s.end - now }))
+          .filter(o => o.rem > 0)
+          .sort((a,b) => a.rem - b.rem)
+          .slice(0, 5);
+        const container = document.getElementById('next-list'); container.innerHTML = '<div><strong>Next Slots:</strong></div>';
+        next.forEach(o => { const d = document.createElement('div'); d.textContent = `${o.id} → ${Math.ceil(o.rem/1000)}s`; container.appendChild(d); });
+      }
+
+      const rows = ['A','B','C','D','E','F'];
+      function initGrids() {
+        const r1 = document.getElementById('row1-440'), r2 = document.getElementById('row2-440');
+        for (let s = 1; s <= 6; s++) {
+          const wrap = document.createElement('div'); wrap.className='server-wrapper';
+          const h3 = document.createElement('h3'); h3.textContent = `SERVER S${s}`; wrap.appendChild(h3);
+          const g  = document.createElement('div'); g.className='grids'; wrap.appendChild(g);
+          (s <= 3 ? r1 : r2).appendChild(wrap);
+          rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`440-S${s}-${r}${i}`, g); });
         }
-      });
-      if(changed) updateCounts(); updateNext();
-    },500);
-  });
+        const ga = document.getElementById('grids-255a'); rows.forEach(r => { for (let i = 1; i <= 6; i++) createSlot(`255-S1-${r}${i}`, ga); });
+        const gb = document.getElementById('grids-255b'); for (let i = 1; i <= 6; i++) createSlot(`255-S2-B${i}`, gb);
+      }
+      initGrids();
+
+      function refreshState() {
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache: 'no-cache' })
+          .then(r => r.json())
+          .then(data => {
+            Object.values(slots).forEach(s => {
+              const [room, server, slotId] = s.id.split('-');
+              const key = `${room}-${server}-${slotId}`;
+              const e = data[key] || { status: '', end: 0 };
+              s.state = e.status;
+              s.end = e.end;
+              updateUI(s);
+            }); updateCounts(); updateNext();
+          }).catch(console.error);
+      }
+      refreshState(); setInterval(refreshState, 5000);
+
+      setInterval(() => {
+        const now = Date.now(); let changed = false;
+        Object.values(slots).forEach(s => {
+          if (s.state === 'in-use') {
+            const rem = s.end - now;
+            if (rem <= 0) {
+              s.state = 'done'; s.end = 0; updateUI(s);
+              const [room, server, slotId] = s.id.split('-');
+              logEvent('upload_done', room, server, slotId, ''); changed = true;
+            } else {
+              s.el.querySelector('.timer').textContent = `${Math.ceil(rem/1000)}s`;
+            }
+          }
+        }); if (changed) updateCounts(); updateNext();
+      }, 500);
+    });
   </script>
 </body>
 </html>
