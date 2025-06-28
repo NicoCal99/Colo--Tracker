@@ -145,8 +145,31 @@
         const ga=document.getElementById('grids-255a'),gb=document.getElementById('grids-255b');rows.forEach(r=>{for(let j=1;j<=6;j++)createSlot(`255-S1-${r}${j}`,ga);});for(let j=1;j<=6;j++)createSlot(`255-S2-B${j}`,gb);}
       initGrids();
 
-      function refreshState(){fetch(`${LOG_URL}?mode=getState`,{cache:'no-cache'}).then(r=>r.json()).then(d=>{Object.values(slots).forEach(s=>{const [r,sr,sl]=s.id.split('-');const e=d[`${r}-${sr}-${sl}`]||{status:'',end:0};s.state=e.status;s.end=e.end;updateUI(s);});updateCounts();updateNext();}).catch(console.error);}
-      refreshState();setInterval(refreshState,5000);
+      function refreshState() {
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, { cache: 'no-cache' })
+          .then(r => r.json())
+          .then(data => {
+            Object.values(slots).forEach(s => {
+              const [room, server, slotId] = s.id.split('-');
+              const key = `${room}-${server}-${slotId}`;
+              const e = data[key];
+              // Only override state if server returned entry
+              if (e) {
+                s.state = e.status;
+                // preserve local end unless in-use updates
+                if (e.status === 'in-use') {
+                  s.end = e.end;
+                }
+              }
+              updateUI(s);
+            });
+            updateCounts();
+            updateNext();
+          })
+          .catch(console.error);
+      }
+      refreshState();
+      setInterval(refreshState, 5000);
 
       setInterval(()=>{const now=Date.now();let ch=false;Object.values(slots).forEach(s=>{if(s.state==='in-use'){const rem=s.end-now;if(rem<=0){s.state='done';s.end=0;updateUI(s);const [r,sr,sl]=s.id.split('-');logEvent('upload_done',r,sr,sl,'');ch=true;}else s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;}});if(ch)updateCounts();updateNext();},500);
     });
