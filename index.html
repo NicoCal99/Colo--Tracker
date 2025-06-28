@@ -6,26 +6,28 @@
   <title>Server Slot Tracker</title>
   <style>
     body { font-family: sans-serif; padding: 16px; }
-    #controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 16px; }
-    #controls div { display: flex; gap: 8px; align-items: center; }
+    #controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+    #controls div { display: flex; flex-direction: column; gap: 4px; }
     #controls input, #controls button { padding: 4px 8px; }
 
-    #summary { text-align: right; margin-bottom: 16px; font-size: 14px; }
-    #summary div { margin: 2px 0; }
-    #next-list { text-align: right; margin-bottom: 24px; font-size: 13px; }
+    #summary { margin-bottom: 16px; font-size: 14px; }
+    #summary div { margin: 4px 0; }
+    #next-list { margin-bottom: 24px; font-size: 13px; }
     #next-list div { margin: 2px 0; }
 
+    h2 { margin-top: 24px; }
     .row-group { display: flex; gap: 32px; margin-bottom: 32px; }
     .server-wrapper { display: flex; flex-direction: column; align-items: center; }
-    .server-wrapper h3 { margin: 0 0 8px; }
+    .server-wrapper h3 { margin: 0 0 8px; font-size: 16px; }
 
-    .grids { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
-    .slot { position: relative; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
-      cursor: pointer; background: #eee; display: flex; flex-direction: column; align-items: center; }
-    .slot.in-use { background: lightcoral; }
-    .slot.done   { background: lightgreen; }
-    .slot.inactive { background: lightgray; }
-    .timer { position: absolute; bottom: 4px; font-size: 12px; }
+    .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 100px; gap: 8px; }
+    .slot { position: relative; border: 1px solid #ccc; border-radius: 4px;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      cursor: pointer; background: #eee; }
+    .slot.in-use     { background: lightcoral; }
+    .slot.done       { background: lightgreen; }
+    .slot.inactive   { background: lightgray; }
+    .slot .timer     { position: absolute; bottom: 4px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -40,65 +42,210 @@
       <button id="colStart">Start Collect</button>
       <button id="colEnd">End Collect</button>
     </div>
+    <div>
+      <input id="activator" placeholder="Activator…" />
+      <button id="actStart">Start Activate</button>
+      <button id="actEnd">End Activate</button>
+      <input id="deactivator" placeholder="Deactivator…" />
+      <button id="deactStart">Start Deactivate</button>
+      <button id="deactEnd">End Deactivate</button>
+    </div>
   </div>
+
   <div id="summary">
     <div id="total">Total Ready: 0</div>
-    <div id="r440">440: 0</div>
-    <div id="r255">255: 0</div>
+    <div id="r440">440 Ready: 0</div>
+    <div id="r255">255 Ready: 0</div>
   </div>
-  <div id="next-list"><div><strong>Next:</strong></div></div>
 
-  <h2>440</h2>
-  <div id="r440-wrap" class="row-group"></div>
+  <div id="next-list"><div><strong>Next Slots:</strong></div></div>
 
-  <h2>255</h2>
-  <div id="r255-wrap" class="row-group"></div>
+  <h2>Room 440</h2>
+  <div id="wrapper-440">
+    <div class="row-group" id="row1-440"></div>
+    <div class="row-group" id="row2-440"></div>
+  </div>
+
+  <h2>Room 255</h2>
+  <div class="row-group">
+    <div class="server-wrapper">
+      <h3>Server 1</h3>
+      <div id="grids-255a" class="grids"></div>
+    </div>
+    <div class="server-wrapper">
+      <h3>Server 2</h3>
+      <div id="grids-255b" class="grids"></div>
+    </div>
+  </div>
 
   <script>
-    document.addEventListener('DOMContentLoaded',()=>{
-      const D=30000,URL='https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
-      const slots={},mode=null;
-      let curMode=null,curUser='';
-      function bind(start,end,input,act){
-        document.getElementById(start).onclick=()=>{ const u=document.getElementById(input).value.trim(); if(!u||curMode) return; curMode=act;curUser=u; };
-        document.getElementById(end).onclick=()=>{ if(curMode!==act) return; curMode=null;curUser=''; };
-      }
-      bind('logStart','logEnd','uploader','upload_started');
-      bind('colStart','colEnd','collector','collected');
+    document.addEventListener('DOMContentLoaded', () => {
+      const DURATION = 30000;
+      const LOG_URL  = 'https://script.google.com/macros/s/AKfycbyvlorG-cm0PLCrkzl0BZeHeSIwXdBWu3U4ElBI8zMbaz_h96TK0e3l88wNDWcmNl3JMw/exec';
+      const slots    = {};
+      let mode       = null;
+      let currentUser = '';
 
-      function fetchState(){
-        fetch(URL+'?mode=getState&_='+Date.now()).then(r=>r.json()).then(data=>{
-          Object.entries(slots).forEach(([id,s])=>{
-            const e=data[id]||{status:'',end:0};
-            s.state=e.status;s.end=e.end;update(s);
-          }); summary(); next();
-        }).catch(console.error);
-      }
-
-      function act(id){ if(!curMode) return; const s=slots[id];
-        const [r,sv,sl]=id.split('-');
-        if(curMode==='upload_started'){s.state='in-use';s.end=Date.now()+D; post(curMode,r,sv,sl,curUser);} else if(curMode==='collected'&&s.state==='done'){s.state='idle';s.end=0; post(curMode,r,sv,sl,curUser);} update(s); summary(); next();
+      // Setup control binding for four actions with validation
+      function bind(startId, endId, inputId, action, label) {
+        document.getElementById(startId).onclick = () => {
+          const name = document.getElementById(inputId).value.trim();
+          if (!name) return alert(`Please enter a ${label} name before starting.`);
+          if (mode && mode !== action) return alert(`Please finish "${mode.replace('_',' ')}" before starting ${label}.`);
+          mode = action;
+          currentUser = name;
+        };
+        document.getElementById(endId).onclick = () => {
+          if (mode !== action) return alert(`Not currently in ${label} mode.`);
+          mode = null;
+          currentUser = '';
+        };
       }
 
-      function post(a,r,sv,sl,u){ fetch(`${URL}?action=${a}&room=${r}&server=${sv}&slot=${sl}&user=${u}`,{cache:'no-cache'}); }
-      function update(s){ const c=s.el; c.classList.remove('in-use','done','inactive'); c.querySelector('.timer').textContent=''; if(s.state==='in-use') c.classList.add('in-use'); if(s.state==='done') c.classList.add('done'); if(s.state==='inactive') c.classList.add('inactive'); }
+      // Bind each action with its label
+      bind('logStart','logEnd','uploader','upload_started','Logging');
+      bind('colStart','colEnd','collector','collected','Collecting');
+      bind('actStart','actEnd','activator','activated','Activation');
+      bind('deactStart','deactEnd','deactivator','inactivated','Deactivation');
 
-      function summary(){ let t=0,c1=0,c2=0; Object.values(slots).forEach(s=>{if(s.state==='done'){t++;if(s.id.startsWith('440'))c1++;else c2++;}});
-        document.getElementById('total').textContent=`Total Ready: ${t}`;
-        document.getElementById('r440').textContent=`440: ${c1}`;
-        document.getElementById('r255').textContent=`255: ${c2}`;
+      // Initialize grids after bindings
+      initGrids();
+
+      // Create a slot element and click handler
+      function createSlot(id, container) {
+        const el = document.createElement('div');
+        el.className = 'slot';
+        el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
+        container.appendChild(el);
+        slots[id] = { id, el, state: 'idle', end: 0 };
+
+        el.onclick = () => {
+          if (!mode) return;
+          const [room, server, slotId] = id.split('-');
+          if (mode === 'upload_started') {
+            slots[id].state = 'in-use';
+            slots[id].end   = Date.now() + DURATION;
+            logEvent(mode, room, server, slotId);
+          } else if (mode === 'collected' && slots[id].state === 'done') {
+            slots[id].state = 'idle';
+            slots[id].end   = 0;
+            logEvent(mode, room, server, slotId);
+          } else if (mode === 'activated') {
+            slots[id].state = 'idle';
+            slots[id].end   = 0;
+            logEvent(mode, room, server, slotId);
+          } else if (mode === 'inactivated') {
+            slots[id].state = 'inactive';
+            slots[id].end   = 0;
+            logEvent(mode, room, server, slotId);
+          }
+          updateUI(slots[id]);
+          updateCounts();
+          updateNext();
+        };
       }
-      function next(){ const now=Date.now(); const arr=Object.values(slots).filter(s=>s.state==='in-use').map(s=>({id:s.id,rem:s.end-now})).filter(o=>o.rem>0).sort((a,b)=>a.rem-b.rem).slice(0,5);
-        const c=document.getElementById('next-list'); c.innerHTML='<div><strong>Next:</strong></div>'; arr.forEach(o=>{const d=document.createElement('div');d.textContent=`${o.id} → ${Math.ceil(o.rem/1000)}s`;c.appendChild(d);}); }
 
-      function tick(){ const now=Date.now(); let ch=false; Object.values(slots).forEach(s=>{if(s.state==='in-use'){const rem=s.end-now; if(rem<=0){s.state='done';s.end=0;update(s);const [r,sv,sl]=s.id.split('-'); post('upload_done',r,sv,sl,''); ch=true;} else s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;}}); if(ch) summary(); next(); }
+      // Update visual state
+      function updateUI(s) {
+        s.el.classList.remove('in-use','done','inactive');
+        s.el.querySelector('.timer').textContent = '';
+        if (s.state === 'in-use')    s.el.classList.add('in-use');
+        if (s.state === 'done')      s.el.classList.add('done');
+        if (s.state === 'inactive')  s.el.classList.add('inactive');
+      }
 
-      function init(room,wrap,servers){ servers.forEach(s=>{const div=document.createElement('div');div.className='grids';wrap.appendChild(div); ['A','B','C','D','E','F'].forEach(r=>{ for(let i=1;i<=6;i++){const id=`${room}-${s}-${r}${i}`; const el=document.createElement('div'); el.className='slot'; el.innerHTML=`<div class="content">${id}</div><div class="timer"></div>`; div.appendChild(el); slots[id]={id,el,state:'idle',end:0}; el.onclick=()=>act(id); }});});}
+      // Build server grids
+      function initGrids() {
+        const r1 = document.getElementById('row1-440'),
+              r2 = document.getElementById('row2-440');
+        const rows = ['A','B','C','D','E','F'];
 
-      init('440',document.getElementById('r440-wrap'),['S1','S2','S3','S4','S5','S6']);
-      init('255',document.getElementById('r255-wrap'),['S1','S2']);
+        ['S1','S2','S3','S4','S5','S6'].forEach((srv, i) => {
+          const wrap = i < 3 ? r1 : r2;
+          const serverWrapper = document.createElement('div');
+          serverWrapper.className = 'server-wrapper';
+          const header = document.createElement('h3');
+          header.textContent = `Server ${i+1}`;
+          serverWrapper.appendChild(header);
+          const container = document.createElement('div');
+          container.className = 'grids';
+          serverWrapper.appendChild(container);
+          wrap.appendChild(serverWrapper);
 
-      fetchState(); setInterval(fetchState,5000); setInterval(tick,500);
+          rows.forEach(r => {
+            for (let x = 1; x <= 6; x++) {
+              createSlot(`440-${srv}-${r}${x}`, container);
+            }
+          });
+        });
+
+        const ga = document.getElementById('grids-255a'),
+              gb = document.getElementById('grids-255b');
+        ['S1','S2'].forEach((srv, idx) => {
+          const wrapper = idx === 0
+            ? document.querySelector('#grids-255a').parentElement
+            : document.querySelector('#grids-255b').parentElement;
+          wrapper.querySelector('h3').textContent = `Server ${idx+1}`;
+          rows.forEach(r => {
+            for (let x = 1; x <= 6; x++) {
+              createSlot(`255-${srv}-${r}${x}`, idx === 0 ? ga : gb);
+            }
+          });
+        });
+      }
+
+      // Countdown & state transitions
+      setInterval(() => {
+        const now = Date.now(), changedSlots = [];
+        Object.values(slots).forEach(s => {
+          if (s.state === 'in-use') {
+            const rem = s.end - now;
+            if (rem <= 0) {
+              s.state = 'done';
+              updateUI(s);
+              const [room, server, slotId] = s.id.split('-');
+              logEvent('upload_done', room, server, slotId);
+              changedSlots.push(s.id);
+            } else {
+              s.el.querySelector('.timer').textContent = `${Math.ceil(rem/1000)}s`;
+            }
+          }
+        });
+        if (changedSlots.length) updateCounts();
+        updateNext();
+      }, 500);
+
+      // Summary & Next widgets
+      function updateCounts() {
+        let total=0, c440=0, c255=0;
+        Object.values(slots).forEach(s => {
+          if (s.state === 'done') {
+            total++;
+            if (s.id.startsWith('440-')) c440++;
+            else c255++;
+          }
+        });
+        document.getElementById('total').textContent = `Total Ready: ${total}`;
+        document.getElementById('r440').textContent  = `440 Ready: ${c440}`;
+        document.getElementById('r255').textContent  = `255 Ready: ${c255}`;
+      }
+
+      function updateNext() {
+        const now = Date.now();
+        const arr = Object.values(slots)
+          .filter(s => s.state === 'in-use')
+          .map(s => ({ id: s.id, rem: s.end - now }))
+          .filter(o => o.rem > 0)
+          .sort((a,b) => a.rem - b.rem)
+          .slice(0,5);
+        const container = document.getElementById('next-list');
+        container.innerHTML = '<div><strong>Next Slots:</strong></div>';
+        arr.forEach(o => {
+          const div = document.createElement('div');
+          div.textContent = `${o.id} → ${Math.ceil(o.rem/1000)}s`;
+          container.appendChild(div);
+        });
+      }
     });
   </script>
 </body>
