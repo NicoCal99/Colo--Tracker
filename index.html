@@ -81,7 +81,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const DURATION = 30000;
-      const LOG_URL  = 'https://script.google.com/macros/s/.../exec';
+      const LOG_URL  = 'https://script.google.com/macros/s/AKfycbzMAtD7Z5Iw9blyzAC5ue4WMgjZW-s7xdRH1fwH-Fo67C0AQDMMBKmLi03YOOzbGJc66w/exec';
       const slots    = {};
       let mode       = null;
       let currentUser = '';
@@ -105,6 +105,7 @@
 
       initGrids();
       refreshState();
+      setInterval(refreshState, 5000);
 
       function createSlot(id, container) {
         const el = document.createElement('div'); el.className='slot';
@@ -114,10 +115,20 @@
         el.onclick = () => {
           if (!mode) return;
           const [room,srv,sl] = id.split('-');
-          if (mode==='upload_started') { slots[id].state='in-use'; slots[id].end=Date.now()+DURATION; logEvent(mode,room,srv,sl);} 
-          else if (mode==='collected' && slots[id].state==='done') { slots[id].state='idle'; slots[id].end=0; logEvent(mode,room,srv,sl);} 
-          else if (mode==='activated') { slots[id].state='idle'; slots[id].end=0; logEvent(mode,room,srv,sl);} 
-          else if (mode==='inactivated') { slots[id].state='inactive'; slots[id].end=0; logEvent(mode,room,srv,sl);} 
+          if (mode==='upload_started') { 
+            slots[id].state='in-use';
+            slots[id].end=Date.now()+DURATION;
+            logEvent(mode,room,srv,sl);
+          } else if (mode==='collected' && slots[id].state==='done') { 
+            slots[id].state='idle'; slots[id].end=0;
+            logEvent(mode,room,srv,sl);
+          } else if (mode==='activated') { 
+            slots[id].state='idle'; slots[id].end=0;
+            logEvent(mode,room,srv,sl);
+          } else if (mode==='inactivated') { 
+            slots[id].state='inactive'; slots[id].end=0;
+            logEvent(mode,room,srv,sl);
+          }
           updateUI(slots[id]); updateCounts(); updateNext();
         };
       }
@@ -131,20 +142,20 @@
       }
 
       function initGrids() {
-        const r1=document.getElementById('row1-440'),r2=document.getElementById('row2-440');
+        const r1=document.getElementById('row1-440'), r2=document.getElementById('row2-440');
         const rows=['A','B','C','D','E','F'];
         ['S1','S2','S3','S4','S5','S6'].forEach((srv,i)=>{
           const wrap=i<3?r1:r2;
-          const sw=document.createElement('div');sw.className='server-wrapper';
-          const h=document.createElement('h3');h.textContent=`Server ${i+1}`;sw.appendChild(h);
-          const g=document.createElement('div');g.className='grids';sw.appendChild(g);wrap.appendChild(sw);
-          rows.forEach(r=>{for(let x=1;x<=6;x++)createSlot(`440-${srv}-${r}${x}`,g)});
+          const sw=document.createElement('div'); sw.className='server-wrapper';
+          const h=document.createElement('h3'); h.textContent=`Server ${i+1}`; sw.appendChild(h);
+          const g=document.createElement('div'); g.className='grids'; sw.appendChild(g); wrap.appendChild(sw);
+          rows.forEach(r=>{ for(let x=1;x<=6;x++) createSlot(`440-${srv}-${r}${x}`,g) });
         });
-        const ga=document.getElementById('grids-255a'),gb=document.getElementById('grids-255b');
+        const ga=document.getElementById('grids-255a'), gb=document.getElementById('grids-255b');
         ['S1','S2'].forEach((srv,idx)=>{
           const wrapper=idx===0?ga.parentElement:gb.parentElement;
           wrapper.querySelector('h3').textContent=`Server ${idx+1}`;
-          rows.forEach(r=>{for(let x=1;x<=6;x++)createSlot(`255-${srv}-${r}${x}`,idx===0?ga:gb)});
+          rows.forEach(r=>{ for(let x=1;x<=6;x++) createSlot(`255-${srv}-${r}${x}`,idx===0?ga:gb) });
         });
       }
 
@@ -153,38 +164,62 @@
           .then(r=>r.json())
           .then(data=>{
             Object.values(slots).forEach(s=>{
-              const key = s.id;
-              if (data[key]) {
-                s.state = data[key].status;
-                s.end   = data[key].end;
-                updateUI(s);
+              const entry = data[s.id];
+              if (entry) {
+                // only overwrite non in-use
+                if (s.state!=='in-use') {
+                  s.state = entry.status;
+                  s.end   = entry.end;
+                  updateUI(s);
+                }
               }
             });
             updateCounts(); updateNext();
-          })
-          .catch(console.error);
+          }).catch(console.error);
       }
 
       setInterval(()=>{
-        const now=Date.now();let changed=false;
+        const now=Date.now(); let changed=false;
         Object.values(slots).forEach(s=>{
           if(s.state==='in-use'){
             const rem=s.end-now;
-            if(rem<=0){s.state='done';updateUI(s);const[a,b,c]=s.id.split('-');logEvent('upload_done',a,b,c);changed=true;}
-            else{ s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`; updateUI(s);}  
+            if(rem<=0){
+              s.state='done'; updateUI(s);
+              const [a,b,c]=s.id.split('-'); logEvent('upload_done',a,b,c);
+              changed=true;
+            } else {
+              s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;
+            }
           }
         });
-        if(changed)updateCounts();updateNext();
+        if(changed) updateCounts(); updateNext();
       },500);
 
-      function updateCounts(){let t=0,c1=0,c2=0;Object.values(slots).forEach(s=>{if(s.state==='done'){t++;if(s.id.startsWith('440-'))c1++;else c2++;}});
+      function updateCounts(){
+        let t=0,c1=0,c2=0;
+        Object.values(slots).forEach(s=>{
+          if(s.state==='done'){ t++; if(s.id.startsWith('440-')) c1++; else c2++; }
+        });
         document.getElementById('total').textContent=`Total Ready: ${t}`;
         document.getElementById('r440').textContent=`440 Ready: ${c1}`;
         document.getElementById('r255').textContent=`255 Ready: ${c2}`;
       }
-      function updateNext(){const now=Date.now();const arr=Object.values(slots).filter(s=>s.state==='in-use').map(s=>({id:s.id,rem:s.end-now})).filter(o=>o.rem>0).sort((a,b)=>a.rem-b.rem).slice(0,5);
-        const c=document.getElementById('next-list');c.innerHTML='<div><strong>Next Slots:</strong></div>';
-        arr.forEach(o=>{const d=document.createElement('div');d.textContent=`${o.id} → ${Math.ceil(o.rem/1000)}s`;c.appendChild(d)});
+
+      function updateNext(){
+        const now=Date.now();
+        const arr=Object.values(slots)
+          .filter(s=>s.state==='in-use')
+          .map(s=>({id:s.id,rem:s.end-now}))
+          .filter(o=>o.rem>0)
+          .sort((a,b)=>a.rem-b.rem)
+          .slice(0,5);
+        const c=document.getElementById('next-list');
+        c.innerHTML='<div><strong>Next Slots:</strong></div>';
+        arr.forEach(o=>{
+          const d=document.createElement('div');
+          d.textContent=`${o.id} → ${Math.ceil(o.rem/1000)}s`;
+          c.appendChild(d);
+        });
       }
 
       function logEvent(action,room,server,slot){
