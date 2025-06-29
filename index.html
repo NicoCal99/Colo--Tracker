@@ -9,25 +9,22 @@
     #controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
     #controls div { display: flex; flex-direction: column; gap: 4px; }
     #controls input, #controls button { padding: 4px 8px; }
-
     #summary { margin-bottom: 16px; font-size: 14px; }
     #summary div { margin: 4px 0; }
     #next-list { margin-bottom: 24px; font-size: 13px; }
     #next-list div { margin: 2px 0; }
-
     h2 { margin-top: 24px; }
     .row-group { display: flex; gap: 32px; margin-bottom: 32px; }
     .server-wrapper { display: flex; flex-direction: column; align-items: center; }
     .server-wrapper h3 { margin: 0 0 8px; font-size: 16px; }
-
     .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 100px; gap: 8px; }
     .slot { position: relative; border: 1px solid #ccc; border-radius: 4px;
       display: flex; flex-direction: column; justify-content: center; align-items: center;
       cursor: pointer; background: #eee; }
-    .slot.in-use     { background: lightcoral; }
-    .slot.done       { background: lightgreen; }
-    .slot.inactive   { background: lightgray; }
-    .slot .timer     { position: absolute; bottom: 4px; font-size: 12px; }
+    .slot.in-use   { background: lightcoral; }
+    .slot.done     { background: lightgreen; }
+    .slot.inactive { background: lightgray; }
+    .slot .timer   { position: absolute; bottom: 4px; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -83,10 +80,9 @@
       const DURATION = 30000;
       const LOG_URL  = 'https://script.google.com/macros/s/AKfycbzMAtD7Z5Iw9blyzAC5ue4WMgjZW-s7xdRH1fwH-Fo67C0AQDMMBKmLi03YOOzbGJc66w/exec';
       const slots    = {};
-      let mode       = null,
-          currentUser = '';
-      
-      // Bind controls
+      let mode       = null;
+      let currentUser = '';
+
       function bind(start, end, input, action, label) {
         document.getElementById(start).onclick = () => {
           const name = document.getElementById(input).value.trim();
@@ -104,13 +100,6 @@
       bind('actStart','actEnd','activator','activated','Activate');
       bind('deactStart','deactEnd','deactivator','inactivated','Deactivate');
 
-            // Initialize everything
-      initGrids();
-      // Initial state load
-      refreshState();
-      // Only periodic tick for timers; refresh on load and after each logEvent
-      setInterval(tick, 500);
-
       function createSlot(id, container) {
         const el = document.createElement('div'); el.className='slot';
         el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
@@ -121,121 +110,108 @@
 
       function handleSlotClick(id) {
         if (!mode) return;
-        const [room,srv,sl] = id.split('-');
-        const slot = slots[id];
-        if (mode === 'upload_started') {
-          slot.state = 'in-use'; slot.end = Date.now() + DURATION;
-        } else if (mode === 'collected' && slot.state === 'done') {
-          slot.state = 'idle'; slot.end = 0;
-        } else if (mode === 'activated') {
-          slot.state = 'idle'; slot.end = 0;
-        } else if (mode === 'inactivated') {
-          slot.state = 'inactive'; slot.end = 0;
-        } else return;
-        updateUI(slot); updateCounts(); updateNext();
+        const slotObj = slots[id];
+        const [room, srv, sl] = id.split('-');
+        switch (mode) {
+          case 'upload_started':
+            slotObj.state = 'in-use'; slotObj.end = Date.now() + DURATION; break;
+          case 'collected':
+            if (slotObj.state !== 'done') return;
+            slotObj.state = 'idle'; slotObj.end = 0; break;
+          case 'activated':
+            slotObj.state = 'idle'; slotObj.end = 0; break;
+          case 'inactivated':
+            slotObj.state = 'inactive'; slotObj.end = 0; break;
+        }
+        updateUI(slotObj); updateCounts(); updateNext();
         logEvent(mode, room, srv, sl);
       }
 
       function updateUI(s) {
         s.el.classList.remove('in-use','done','inactive');
         s.el.querySelector('.timer').textContent = '';
-        if (s.state === 'in-use') s.el.classList.add('in-use');
-        if (s.state === 'done')   s.el.classList.add('done');
-        if (s.state === 'inactive') s.el.classList.add('inactive');
+        if (s.state==='in-use')    s.el.classList.add('in-use');
+        if (s.state==='done')      s.el.classList.add('done');
+        if (s.state==='inactive')  s.el.classList.add('inactive');
       }
 
       function initGrids() {
-        const rows = ['A','B','C','D','E','F'];
-        const r1 = document.getElementById('row1-440');
-        const r2 = document.getElementById('row2-440');
-        ['S1','S2','S3','S4','S5','S6'].forEach((srv,i) => {
-          const wrap = i < 3 ? r1 : r2;
-          const sw = document.createElement('div'); sw.className = 'server-wrapper';
-          const h = document.createElement('h3'); h.textContent = `Server ${i+1}`; sw.appendChild(h);
-          const g = document.createElement('div'); g.className = 'grids'; sw.appendChild(g); wrap.appendChild(sw);
-          rows.forEach(r => { for (let x = 1; x <= 6; x++) createSlot(`440-${srv}-${r}${x}`, g); });
+        const rows=['A','B','C','D','E','F'];
+        const r1=document.getElementById('row1-440');
+        const r2=document.getElementById('row2-440');
+        ['S1','S2','S3','S4','S5','S6'].forEach((srv,i)=>{
+          const wrap = i<3? r1: r2;
+          const sw=document.createElement('div'); sw.className='server-wrapper';
+          const h=document.createElement('h3'); h.textContent=`Server ${i+1}`; sw.appendChild(h);
+          const g=document.createElement('div'); g.className='grids'; sw.appendChild(g); wrap.appendChild(sw);
+          rows.forEach(r=>{for(let x=1;x<=6;x++) createSlot(`440-${srv}-${r}${x}`, g);});
         });
-        const ga = document.getElementById('grids-255a');
-        const gb = document.getElementById('grids-255b');
-        ['S1','S2'].forEach((srv,idx) => {
-          const wrapper = idx === 0 ? ga.parentNode : gb.parentNode;
-          wrapper.querySelector('h3').textContent = `Server ${idx+1}`;
-          rows.forEach(r => { for (let x = 1; x <= 6; x++) createSlot(`255-${srv}-${r}${x}`, idx === 0 ? ga : gb); });
+        const ga=document.getElementById('grids-255a'), gb=document.getElementById('grids-255b');
+        ['S1','S2'].forEach((srv,idx)=>{
+          const wrapper=idx===0? ga.parentNode: gb.parentNode;
+          wrapper.querySelector('h3').textContent=`Server ${idx+1}`;
+          const grid = idx===0? ga: gb;
+          rows.forEach(r=>{for(let x=1;x<=6;x++) createSlot(`255-${srv}-${r}${x}`, grid);});
         });
       }
 
       function refreshState() {
-        const url = `${LOG_URL}?mode=getState&_=${Date.now()}`;
-        fetch(url,{cache:'no-cache'})
-          .then(r => r.json())
-          .then(data => {
-            Object.values(slots).forEach(s => {
-              const entry = data[s.id];
-              if (entry && s.state !== 'in-use') {
-                s.state = entry.status;
-                s.end = entry.end;
-                updateUI(s);
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`,{cache:'no-cache'})
+          .then(r=>r.json())
+          .then(data=>{
+            Object.values(slots).forEach(s=>{
+              const e = data[s.id];
+              if (e && s.state!=='in-use') {
+                s.state = e.status; s.end = e.end; updateUI(s);
               }
             });
             updateCounts(); updateNext();
-          })
-          .catch(console.error);
+          }).catch(console.error);
       }
 
       function tick() {
-        const now = Date.now();
-        let changed = false;
-        Object.values(slots).forEach(s => {
-          if (s.state === 'in-use') {
-            const rem = s.end - now;
-            if (rem <= 0) {
-              s.state = 'done'; updateUI(s);
-              const [r,sv,sl] = s.id.split('-');
-              logEvent('upload_done', r, sv, sl);
-              changed = true;
+        const now=Date.now(); let changed=false;
+        Object.values(slots).forEach(s=>{
+          if(s.state==='in-use'){
+            const rem=s.end-now;
+            if(rem<=0){ s.state='done'; updateUI(s);
+              const [r,sv,sl]=s.id.split('-'); logEvent('upload_done',r,sv,sl);
+              changed=true;
             } else {
-              s.el.querySelector('.timer').textContent = `${Math.ceil(rem/1000)}s`;
+              s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`;
             }
           }
         });
-        if (changed) updateCounts(); updateNext();
+        if(changed) updateCounts(); updateNext();
       }
 
-      function updateCounts() {
-        let total = 0, c440 = 0, c255 = 0;
-        Object.values(slots).forEach(s => {
-          if (s.state === 'done') {
-            total++;
-            if (s.id.startsWith('440-')) c440++; else c255++;
-          }
-        });
-        document.getElementById('total').textContent = `Total Ready: ${total}`;
-        document.getElementById('r440').textContent = `440 Ready: ${c440}`;
-        document.getElementById('r255').textContent = `255 Ready: ${c255}`;
+      function updateCounts(){
+        let total=0,c440=0,c255=0;
+        Object.values(slots).forEach(s=>{ if(s.state==='done'){ total++; if(s.id.startsWith('440-')) c440++; else c255++; }});
+        document.getElementById('total').textContent=`Total Ready: ${total}`;
+        document.getElementById('r440').textContent=`440 Ready: ${c440}`;
+        document.getElementById('r255').textContent=`255 Ready: ${c255}`;
       }
 
-      function updateNext() {
-        const now = Date.now();
-        const next = Object.values(slots)
-          .filter(s => s.state === 'in-use')
-          .map(s => ({ id: s.id, rem: s.end - now }))
-          .filter(o => o.rem > 0)
-          .sort((a, b) => a.rem - b.rem)
+      function updateNext(){
+        const now=Date.now();
+        const next=Object.values(slots)
+          .filter(s=>s.state==='in-use')
+          .map(s=>({id:s.id,rem:s.end-now}))
+          .filter(o=>o.rem>0)
+          .sort((a,b)=>a.rem-b.rem)
           .slice(0,5);
-        const container = document.getElementById('next-list');
-        container.innerHTML = '<div><strong>Next Slots:</strong></div>';
-        next.forEach(o => {
-          const div = document.createElement('div');
-          div.textContent = `${o.id} → ${Math.ceil(o.rem/1000)}s`;
-          container.appendChild(div);
-        });
+        const c=document.getElementById('next-list'); c.innerHTML='<div><strong>Next Slots:</strong></div>';
+        next.forEach(o=>{ const d=document.createElement('div'); d.textContent=`${o.id} → ${Math.ceil(o.rem/1000)}s`; c.appendChild(d); });
       }
 
-      function logEvent(action,room,server,slot) {
+      function logEvent(action,room,server,slot){
         fetch(`${LOG_URL}?action=${action}&room=${room}&server=${server}&slot=${slot}&user=${currentUser}`,{cache:'no-cache'})
-          .then(() => {/* no-op */})
           .catch(console.error);
       }
+
+      // Kick off
+      initGrids(); refreshState(); setInterval(tick,500);
     });
   </script>
 </body>
