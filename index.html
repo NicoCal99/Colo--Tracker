@@ -81,7 +81,7 @@
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const DURATION = 30000;
-      const LOG_URL  = 'https://script.google.com/macros/s/AKfycbzMAtD7Z5Iw9blyzAC5ue4WMgjZW-s7xdRH1fwH-Fo67C0AQDMMBKmLi03YOOzbGJc66w/exec';
+      const LOG_URL  = 'https://script.google.com/macros/s/.../exec';
       const slots    = {};
       let mode       = null;
       let currentUser = '';
@@ -104,6 +104,7 @@
       bind('deactStart','deactEnd','deactivator','inactivated','Deactivate');
 
       initGrids();
+      refreshState();
 
       function createSlot(id, container) {
         const el = document.createElement('div'); el.className='slot';
@@ -147,6 +148,23 @@
         });
       }
 
+      function refreshState() {
+        fetch(`${LOG_URL}?mode=getState`,{cache:'no-cache'})
+          .then(r=>r.json())
+          .then(data=>{
+            Object.values(slots).forEach(s=>{
+              const key = s.id;
+              if (data[key]) {
+                s.state = data[key].status;
+                s.end   = data[key].end;
+                updateUI(s);
+              }
+            });
+            updateCounts(); updateNext();
+          })
+          .catch(console.error);
+      }
+
       setInterval(()=>{
         const now=Date.now();let changed=false;
         Object.values(slots).forEach(s=>{
@@ -169,7 +187,11 @@
         arr.forEach(o=>{const d=document.createElement('div');d.textContent=`${o.id} → ${Math.ceil(o.rem/1000)}s`;c.appendChild(d)});
       }
 
-      function logEvent(action,room,server,slot){fetch(`${LOG_URL}?action=${action}&room=${room}&server=${server}&slot=${slot}&user=${currentUser}`,{cache:'no-cache'}).catch(console.error)}
+      function logEvent(action,room,server,slot){
+        fetch(`${LOG_URL}?action=${action}&room=${room}&server=${server}&slot=${slot}&user=${currentUser}`,{cache:'no-cache'})
+          .then(()=>refreshState())
+          .catch(console.error);
+      }
     });
   </script>
 </body>
