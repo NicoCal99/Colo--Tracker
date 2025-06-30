@@ -83,189 +83,144 @@
       let mode       = null;
       let currentUser= '';
 
+      // Mode button bindings
       function bind(startId, endId, inputId, action, label) {
-        document.getElementById(startId).onclick = () => {
+        document.getElementById(startId).addEventListener('click', () => {
           const name = document.getElementById(inputId).value.trim();
           if (!name) return alert(`Enter ${label} name.`);
           if (mode && mode !== action) return alert(`Finish ${mode} first.`);
           mode = action; currentUser = name;
-        };
-        document.getElementById(endId).onclick = () => {
+        });
+        document.getElementById(endId).addEventListener('click', () => {
           if (mode !== action) return alert(`Not in ${label} mode.`);
           mode = null; currentUser = '';
-        };
+        });
       }
       bind('logStart','logEnd','uploader','upload_started','Log');
       bind('colStart','colEnd','collector','collected','Collect');
       bind('actStart','actEnd','activator','activated','Activate');
       bind('deactStart','deactEnd','deactivator','inactivated','Deactivate');
 
+      // Create individual slot
       function createSlot(id, container) {
-        const el = document.createElement('div'); el.className='slot';
+        const el = document.createElement('div'); el.className = 'slot';
         el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
         container.appendChild(el);
-        slots[id] = { id, el, state:'idle', end:0 };
-        el.onclick = () => handleSlotClick(id);
+        slots[id] = { id, el, state: 'idle', end: 0 };
+        el.addEventListener('click', () => handleSlotClick(id));
       }
 
+      // Click handling
       function handleSlotClick(id) {
         if (!mode) return;
         const s = slots[id];
-        const [room,srv,sl] = id.split('-');
-        switch (mode) {
-          case 'upload_started':
-            s.state='in-use'; s.end=Date.now()+DURATION;
-            break;
-          case 'collected':
-            if (s.state!=='done') return;
-            s.state='idle'; s.end=0;
-            break;
-          case 'activated':
-            s.state='idle'; s.end=0;
-            break;
-          case 'inactivated':
-            s.state='inactive'; s.end=0;
-            break;
-        }
-        updateUI(s);
-        updateCounts();
-        updateNext();
+        const [room, srv, sl] = id.split('-');
+        if (mode === 'upload_started') {
+          s.state = 'in-use'; s.end = Date.now() + DURATION;
+        } else if (mode === 'collected' && s.state === 'done') {
+          s.state = 'idle'; s.end = 0;
+        } else if (mode === 'activated') {
+          s.state = 'idle'; s.end = 0;
+        } else if (mode === 'inactivated') {
+          s.state = 'inactive'; s.end = 0;
+        } else return;
+        updateUI(s); updateCounts(); updateNext();
         logEvent(mode, room, srv, sl);
       }
 
+      // Update a slot's appearance
       function updateUI(s) {
         s.el.classList.remove('in-use','done','inactive');
         s.el.querySelector('.timer').textContent = '';
-        if (s.state==='in-use')    s.el.classList.add('in-use');
-        if (s.state==='done')      s.el.classList.add('done');
-        if (s.state==='inactive')  s.el.classList.add('inactive');
+        if (s.state === 'in-use')    s.el.classList.add('in-use');
+        if (s.state === 'done')      s.el.classList.add('done');
+        if (s.state === 'inactive')  s.el.classList.add('inactive');
       }
 
+      // Build grids
       function initGrids() {
-        const rows=['A','B','C','D','E','F'];
-        const r1 = document.getElementById('row1-440'),
-              r2 = document.getElementById('row2-440');
-        ['S1','S2','S3','S4','S5','S6'].forEach((srv,i)=>{
-          const wrap = (i<3? r1 : r2);
-          const sw   = document.createElement('div'); sw.className='server-wrapper';
-          const h    = document.createElement('h3'); h.textContent=`Server ${i+1}`;
-          sw.appendChild(h);
-          const g    = document.createElement('div'); g.className='grids';
-          sw.appendChild(g);
-          wrap.appendChild(sw);
-
+        const rows = ['A','B','C','D','E','F'];
+        // Room 440: Servers 1-3 in row1, 4-6 in row2
+        const r1 = document.getElementById('row1-440');
+        const r2 = document.getElementById('row2-440');
+        ['S1','S2','S3','S4','S5','S6'].forEach((srv, idx) => {
+          const wrap = document.createElement('div'); wrap.className = 'server-wrapper';
+          const h3   = document.createElement('h3'); h3.textContent = `Server ${idx+1}`;
+          wrap.appendChild(h3);
+          const grid = document.createElement('div'); grid.className = 'grids';
+          wrap.appendChild(grid);
+          (idx < 3 ? r1 : r2).appendChild(wrap);
           rows.forEach(r => {
-            for(let x=1;x<=6;x++){
-              createSlot(`440-${srv}-${r}${x}`, g);
+            for (let x = 1; x <= 6; x++) {
+              createSlot(`440-${srv}-${r}${x}`, grid);
             }
           });
         });
 
-        const ga = document.getElementById('grids-255a'),
-              gb = document.getElementById('grids-255b');
-        ['S1','S2'].forEach((srv, idx) => {
-          const grid = (idx===0? ga : gb);
-          grid.parentNode.querySelector('h3').textContent = `Server ${idx+1}`;
-          rows.forEach(r => {
-            for(let x=1;x<=6;x++){
-              createSlot(`255-${srv}-${r}${x}`, grid);
-            }
-          });
-        });
+        // Room 255: Server1 one row (A), Server2 full
+        const gridA = document.getElementById('grids-255a');
+        ['A'].forEach(r => { for (let x = 1; x <= 6; x++) createSlot(`255-S1-${r}${x}`, gridA); });
+        const gridB = document.getElementById('grids-255b');
+        rows.forEach(r => { for (let x = 1; x <= 6; x++) createSlot(`255-S2-${r}${x}`, gridB); });
       }
 
-      function refreshState() {
-        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`, {cache:'no-cache'})
-          .then(r=>r.json())
-          .then(data=>{
+      // Sync from server
+      function	refreshState() {
+        fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`,{cache:'no-cache'})
+          .then(res=>res.json()).then(data=>{
             Object.values(slots).forEach(s => {
-              const entry = data[s.id];         // only exact full key “440-S1-A5”
-              if (entry && s.state!=='in-use') {
-                s.state = entry.status;
-                s.end   = entry.end;
-                updateUI(s);
-              }
-            });
-            updateCounts();
-            updateNext();
-          })
-          .catch(console.error);
+              const e = data[s.id]; if (e) { s.state = e.status; s.end = e.end; updateUI(s); }});
+            updateCounts(); updateNext();
+          }).catch(console.error);
       }
 
+      // Countdown and complete
       function tick() {
-        const now = Date.now();
-        let changed = false;
-
-        Object.values(slots).forEach(s=>{
-          if (s.state==='in-use') {
+        const now = Date.now(); let changed = false;
+        Object.values(slots).forEach(s => {
+          if (s.state === 'in-use') {
             const rem = s.end - now;
             if (rem <= 0) {
-              s.state = 'done';
-              updateUI(s);
-              const [r,sv,sl] = s.id.split('-');
-              logEvent('upload_done', r, sv, sl);
+              s.state = 'done'; updateUI(s);
+              const [r, sv, sl] = s.id.split('-'); logEvent('upload_done', r, sv, sl);
               changed = true;
             } else {
               s.el.querySelector('.timer').textContent = `${Math.ceil(rem/1000)}s`;
             }
           }
         });
-
-        if (changed) updateCounts();
-        updateNext();
+        if (changed) updateCounts(); updateNext();
       }
 
+      // Counts
       function updateCounts() {
-        let total=0, c440=0, c255=0;
-        Object.values(slots).forEach(s=>{
-          if (s.state==='done') {
-            total++;
-            if (s.id.startsWith('440-')) c440++;
-            else c255++;
-          }
-        });
+        let total = 0, c440 = 0, c255 = 0;
+        Object.values(slots).forEach(s => { if (s.state === 'done') { total++; s.id.startsWith('440-') ? c440++ : c255++; }});
         document.getElementById('total').textContent = `Total Ready: ${total}`;
         document.getElementById('r440').textContent   = `440 Ready: ${c440}`;
         document.getElementById('r255').textContent   = `255 Ready: ${c255}`;
       }
 
+      // Next list
       function updateNext() {
         const now = Date.now();
         const next = Object.values(slots)
-          .filter(s=>s.state==='in-use')
-          .map(s=>({id:s.id, rem:s.end-now}))
-          .filter(o=>o.rem>0)
-          .sort((a,b)=>a.rem-b.rem)
+          .filter(s => s.state === 'in-use' && s.end > now)
+          .sort((a,b) => a.end - b.end)
           .slice(0,5);
-
-        const container = document.getElementById('next-list');
-        container.innerHTML = '<div><strong>Next Slots:</strong></div>';
-        next.forEach(o=>{
-          const d = document.createElement('div');
-          d.textContent = `${o.id} → ${Math.ceil(o.rem/1000)}s`;
-          container.appendChild(d);
-        });
+        const nl = document.getElementById('next-list'); nl.innerHTML = '<div><strong>Next Slots:</strong></div>';
+        next.forEach(s => { const d = document.createElement('div'); d.textContent = `${s.id} → ${Math.ceil((s.end-now)/1000)}s`; nl.appendChild(d); });
       }
 
+      // Log events
       function logEvent(action, room, server, slot) {
-        fetch(
-          `${LOG_URL}` +
-          `?action=${action}` +
-          `&room=${room}` +
-          `&server=${server}` +
-          `&slot=${slot}` +
-          `&user=${currentUser}`,
-          {cache:'no-cache'}
-        )
-        .then(()=>refreshState())    // <— immediately re-sync on every action
-        .catch(console.error);
+        const params = new URLSearchParams({ action, room, server, slot, user: currentUser });
+        fetch(`${LOG_URL}?${params}`,{cache:'no-cache'})
+          .then(res=>res.json()).then(data=>{ if(data.status==='ok') refreshState(); }).catch(console.error);
       }
 
-      initGrids();
-      refreshState();
-      setInterval(tick, 500);
+      initGrids(); refreshState(); setInterval(tick, 500);
     });
   </script>
 </body>
 </html>
-
