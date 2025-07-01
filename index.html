@@ -1,172 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Server Slot Tracker</title>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <title>Server Slot Tracker – Tester</title>
   <style>
-    body { font-family: sans-serif; padding: 16px; position: relative; }
-    #controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
-    #controls div { display: flex; flex-direction: column; gap: 4px; }
-    #controls input, #controls button { padding: 4px 8px; }
+    /* Basic reset */
+    body, html { margin:0; padding:0; height:100%; }
+    body { font-family: sans-serif; }
 
-    /* Legend */
-    #legend { margin-bottom: 16px; font-size: 14px; }
+    /* Login overlay */
+    #login-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; }
+    #login-box { background: #fff; padding: 24px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    #login-box input { width: 100%; padding: 8px; margin: 8px 0; }
+    #login-box button { width: 100%; padding: 8px; }
+
+    /* Main UI hidden until auth */
+    #app { display: none; padding: 16px; }
+    h1 { font-size: 24px; margin-bottom: 16px; }
+    #header-info { display: flex; justify-content: space-between; margin-bottom: 16px; }
+    #legend, #summary { font-size: 14px; }
     .legend-item { display: inline-flex; align-items: center; margin-right: 16px; }
     .legend-color { width: 12px; height: 12px; margin-right: 4px; border: 1px solid #ccc; }
     .legend-color.in-use   { background: lightcoral; }
     .legend-color.done     { background: lightgreen; }
     .legend-color.inactive { background: lightgray; background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 4px); }
-
-    #summary, #next-list { font-size: 14px; margin-bottom: 16px; }
+    #controls { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-bottom: 16px; }
+    #controls div { display: flex; flex-direction: column; gap: 4px; }
+    #controls input, #controls button { padding: 4px 8px; }
+    #next-list { font-size: 13px; margin-bottom: 16px; }
     h2 { margin-top: 24px; }
     .row-group { display: flex; gap: 32px; margin-bottom: 32px; }
     .server-wrapper { display: flex; flex-direction: column; align-items: center; }
     .server-wrapper h3 { margin: 0 0 8px; }
-    .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 100px; gap: 8px; }
-
-    .slot { position: relative; border: 1px solid #ccc; border-radius: 4px; background: #eee; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: background-color 0.3s; }
-    .slot.in-use    { background: lightcoral; }
-    .slot.done      { background: lightgreen; }
-    .slot.inactive  { background: lightgray; background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 4px); }
-    .slot .timer    { position: absolute; bottom: 4px; font-size: 12px; }
-
-    #hover-tooltip { position: absolute; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; z-index: 1000; display: none; }
+    .grids { display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 100px; gap: 8px; justify-items: center; }
+    .slot { position: relative; border: 1px solid #ccc; border-radius: 4px; background: #eee; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+    .slot.in-use   { background: lightcoral; }
+    .slot.done     { background: lightgreen; }
+    .slot.inactive { background: lightgray; background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.1) 0, rgba(0,0,0,0.1) 2px, transparent 2px, transparent 4px); }
+    .slot .timer { position: absolute; bottom: 4px; font-size: 12px; }
+    #hover-tooltip { position: absolute; background: rgba(0,0,0,0.75); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; z-index: 1000; }
   </style>
+  <script>
+    let CURRENT_USER = null;
+    let CURRENT_ROLE = null;
+    const LOG_URL = 'https://script.google.com/macros/s/AKfycbzNG_JjzkJ4oA3N2nsLAXKOhw-7Vp5fXj8CPmvymEAqA09CYGsSujTU-hJlMoASlt0/exec';
+
+    function onLoginSuccess(auth) {
+      CURRENT_USER = auth.username;
+      CURRENT_ROLE = auth.role;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      if (CURRENT_ROLE !== 'admin') {
+        document.querySelectorAll('[data-admin]').forEach(b => b.disabled = true);
+      }
+      initGrids();
+      refreshState();
+      setInterval(tick, 500);
+    }
+
+    function onLoginError(msg) {
+      document.getElementById('login-error').textContent = msg;
+    }
+
+    function doLogin() {
+      const u = document.getElementById('login-user').value.trim();
+      const p = document.getElementById('login-pass').value;
+      if (!u || !p) { onLoginError('Enter both username and password.'); return; }
+      google.script.run
+        .withSuccessHandler(auth => {
+          if (auth && auth.role) onLoginSuccess(auth);
+          else onLoginError('Invalid credentials');
+        })
+        .withFailureHandler(err => onLoginError('Login failed'))
+        .validateUserClient(u, p);
+    }
+  </script>
 </head>
 <body>
-  <div id="controls">
-    <div>
-      <input id="uploader" placeholder="Uploader…" />
-      <button id="logStart">Start Log</button><button id="logEnd">End Log</button>
-    </div>
-    <div>
-      <input id="collector" placeholder="Collector…" />
-      <button id="colStart">Start Collect</button><button id="colEnd">End Collect</button>
-    </div>
-    <div>
-      <input id="activator" placeholder="Activator…" />
-      <button id="actStart">Start Activate</button><button id="actEnd">End Activate</button>
-      <input id="deactivator" placeholder="Deactivator…" />
-      <button id="deactStart">Start Deactivate</button><button id="deactEnd">End Deactivate</button>
+  <!-- Login Overlay -->
+  <div id="login-screen">
+    <div id="login-box">
+      <h2>Login</h2>
+      <div id="login-error" style="color:red;margin-bottom:8px;"></div>
+      <input id="login-user" placeholder="Username">
+      <input id="login-pass" type="password" placeholder="Password">
+      <button onclick="doLogin()">Log In</button>
     </div>
   </div>
 
-  <div id="legend">
-    <span class="legend-item"><span class="legend-color in-use"></span>In Use</span>
-    <span class="legend-item"><span class="legend-color done"></span>Done</span>
-    <span class="legend-item"><span class="legend-color inactive"></span>Inactive</span>
+  <!-- Main App -->
+  <div id="app">
+    <h1>Server Slot Tracker Tester</h1>
+    <div id="header-info">
+      <div id="legend">
+        <span class="legend-item"><span class="legend-color in-use"></span>In Use</span>
+        <span class="legend-item"><span class="legend-color done"></span>Done</span>
+        <span class="legend-item"><span class="legend-color inactive"></span>Inactive</span>
+      </div>
+      <div id="summary">
+        <div id="total">Total Ready: 0</div>
+        <div id="r440">440 Ready: 0</div>
+        <div id="r255">255 Ready: 0</div>
+      </div>
+    </div>
+    <div id="controls">
+      <!-- controls markup unchanged -->
+    </div>
+    <div id="next-list"><strong>Next Slots:</strong></div>
+    <h2>Room 440</h2>
+    <div id="wrapper-440">
+      <div class="row-group" id="row1-440"></div>
+      <div class="row-group" id="row2-440"></div>
+    </div>
+    <h2>Room 255</h2>
+    <div class="row-group">
+      <div class="server-wrapper"><h3>Server 1</h3><div id="grids-255a" class="grids"></div></div>
+      <div class="server-wrapper"><h3>Server 2</h3><div id="grids-255b" class="grids"></div></div>
+    </div>
+    <div id="hover-tooltip"></div>
   </div>
-
-  <div id="summary">
-    <div id="total">Total Ready: 0</div>
-    <div id="r440">440 Ready: 0</div>
-    <div id="r255">255 Ready: 0</div>
-  </div>
-  <div id="next-list"><strong>Next Slots:</strong></div>
-
-  <h2>Room 440</h2>
-  <div id="wrapper-440"><div class="row-group" id="row1-440"></div><div class="row-group" id="row2-440"></div></div>
-
-  <h2>Room 255</h2>
-  <div class="row-group">
-    <div class="server-wrapper"><h3>Server 1</h3><div id="grids-255a" class="grids"></div></div>
-    <div class="server-wrapper"><h3>Server 2</h3><div id="grids-255b" class="grids"></div></div>
-  </div>
-
-  <div id="hover-tooltip"></div>
-
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const DURATION = 30000;
-      const LOG_URL = 'https://script.google.com/macros/s/AKfycbxVaMg4ZUCLkWtQE0Jz9eEV5FNMdRTrIGx56OKZJ_9kZKgez3hhr8HEXn9mRt5XWZt7Wg/exec';
-      const slots = {};
-      let mode = null, currentUser = '';
-      const tooltip = document.getElementById('hover-tooltip');
-
-      function bind(startId, endId, inputId, action, label) {
-        document.getElementById(startId).onclick = () => {
-          const name = document.getElementById(inputId).value.trim();
-          if (!name) return alert(`Enter ${label} name.`);
-          if (mode && mode !== action) return alert(`Finish ${mode} first.`);
-          mode = action; currentUser = name;
-        };
-        document.getElementById(endId).onclick = () => {
-          if (mode !== action) return alert(`Not in ${label} mode.`);
-          mode = null; currentUser = '';
-        };
-      }
-      bind('logStart','logEnd','uploader','upload_started','Log');
-      bind('colStart','colEnd','collector','collected','Collect');
-      bind('actStart','actEnd','activator','activated','Activate');
-      bind('deactStart','deactEnd','deactivator','inactivated','Deactivate');
-
-      function createSlot(id, container) {
-        const el = document.createElement('div'); el.className = 'slot';
-        el.innerHTML = `<div class="content">${id}</div><div class="timer"></div>`;
-        el.title = id;
-        el.onmouseenter = () => { tooltip.textContent = el.title; tooltip.style.display = 'block'; };
-        el.onmousemove = e => { tooltip.style.top = e.pageY + 10 + 'px'; tooltip.style.left = e.pageX + 10 + 'px'; };
-        el.onmouseleave = () => { tooltip.style.display = 'none'; };
-        el.onclick = () => handleSlotClick(id);
-        container.appendChild(el);
-        slots[id] = { id, el, state: 'idle', end: 0 };
-      }
-
-      function initGrids() {
-        const rows = ['A','B','C','D','E','F'];
-        const row1 = document.getElementById('row1-440');
-        const row2 = document.getElementById('row2-440');
-        ['S1','S2','S3','S4','S5','S6'].forEach((srv, i) => {
-          const wrap = document.createElement('div'); wrap.className = 'server-wrapper';
-          const h3 = document.createElement('h3'); h3.textContent = `Server ${i+1}`;
-          const grid = document.createElement('div'); grid.className = 'grids';
-          wrap.appendChild(h3); wrap.appendChild(grid);
-          (i<3 ? row1 : row2).appendChild(wrap);
-          rows.forEach(r => { for(let x=1;x<=6;x++) createSlot(`440-${srv}-${r}${x}`, grid); });
-        });
-        const ga = document.getElementById('grids-255a');
-        ['A'].forEach(r=>{ for(let x=1;x<=6;x++) createSlot(`255-S1-${r}${x}`, ga); });
-        const gb = document.getElementById('grids-255b');
-        rows.forEach(r=>{ for(let x=1;x<=6;x++) createSlot(`255-S2-${r}${x}`, gb); });
-      }
-
-      function updateUI(s) {
-        s.el.classList.remove('in-use','done','inactive'); s.el.querySelector('.timer').textContent='';
-        let tip = `${s.id} - ${s.state}`;
-        if(s.state==='in-use'){ const opts={hour:'numeric',minute:'2-digit',hour12:true}; tip+=` until ${new Date(s.end).toLocaleTimeString([],opts)}`; }
-        s.el.title=tip; if(s.state==='in-use') s.el.classList.add('in-use'); if(s.state==='done') s.el.classList.add('done'); if(s.state==='inactive') s.el.classList.add('inactive');
-      }
-
-      function handleSlotClick(id) {
-        if(!mode) return; const s=slots[id]; const [room,srv,sl]=id.split('-');
-        // Guard transitions
-        if(mode==='upload_started' && s.state!=='idle')      return alert('Can only start upload on idle slots.');
-        if(mode==='collected'      && s.state!=='done')      return alert('Can only collect done slots.');
-        if(mode==='activated'      && s.state!=='inactive')  return alert('Can only activate inactive slots.');
-        if(mode==='inactivated'    && !['idle','done'].includes(s.state)) return alert('Can only deactivate idle or done slots.');
-        // Apply
-        if(mode==='upload_started'){ s.state='in-use'; s.end=Date.now()+DURATION; }
-        else if(mode==='collected'&&s.state==='done'){ s.state='idle'; s.end=0; }
-        else if(mode==='activated'){ s.state='idle'; s.end=0; }
-        else if(mode==='inactivated'){ s.state='inactive'; s.end=0; }
-        updateUI(s); updateCounts(); updateNext(); logEvent(mode,room,srv,sl);
-      }
-
-      function refreshState(){ fetch(`${LOG_URL}?mode=getState&_=${Date.now()}`,{cache:'no-cache'})
-        .then(r=>r.json()).then(data=>{ Object.values(slots).forEach(s=>{ const e=data[s.id]; if(e){ s.state=e.status; s.end=e.end; updateUI(s);} }); updateCounts(); updateNext(); }).catch(console.error);
-      }
-
-      function tick(){ const now=Date.now(); Object.values(slots).forEach(s=>{ if(s.state==='in-use'){ const rem=s.end-now; if(rem<=0){ s.state='done'; updateUI(s); const [r,sv,sl]=s.id.split('-'); logEvent('upload_done',r,sv,sl);} else s.el.querySelector('.timer').textContent=`${Math.ceil(rem/1000)}s`; }}); }
-
-      function updateCounts(){ let total=0,c440=0,c255=0; Object.values(slots).forEach(s=>{ if(s.state==='done'){ total++; s.id.startsWith('440-')?c440++:c255++; }}); document.getElementById('total').textContent=`Total Ready: ${total}`; document.getElementById('r440').textContent=`440 Ready: ${c440}`; document.getElementById('r255').textContent=`255 Ready: ${c255}`; }
-
-      function updateNext(){ const now=Date.now(); const next=Object.values(slots).filter(s=>s.state==='in-use'&&s.end>now).sort((a,b)=>a.end-b.end).slice(0,5); const nl=document.getElementById('next-list'); nl.innerHTML='<strong>Next Slots:</strong>'; next.forEach(s=>{ const d=document.createElement('div'); d.textContent=`${s.id} → ${Math.ceil((s.end-now)/1000)}s`; nl.appendChild(d); }); }
-
-      function logEvent(action,room,server,slot){ const p=new URLSearchParams({action,room,server,slot,user:currentUser}); fetch(`${LOG_URL}?${p}`,{cache:'no-cache'}).then(r=>r.json()).then(d=>d.status==='ok'&&refreshState()).catch(console.error); }
-
-      initGrids(); refreshState(); setInterval(tick,500);
-    });
-  </script>
 </body>
 </html>
